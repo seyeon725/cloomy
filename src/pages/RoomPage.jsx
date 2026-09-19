@@ -4,6 +4,7 @@ import FurnitureDeleteModal from '../components/FurnitureDeleteModal';
 import MoveItemsModal from '../components/MoveItemsModal';
 import UnplacedItemsModal from '../components/UnplacedItemsModal';
 import PlacedSummaryModal from '../components/PlacedSummaryModal';
+import Icon from '../components/Icon';
 import './RoomPage.css';
 
 const point = (x, y, z = 0) => [350 + (x - y) * 29, 148 + (x + y) * 15 - z * 34];
@@ -77,7 +78,7 @@ function DoorMarker({ door, selected, onSelect }) {
   </g>;
 }
 export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clearPendingNotice }) {
-  const { furniture, setFurniture, saveError } = room;
+  const { furniture, setFurniture, saveError, rooms = [], activeRoomId = null, setActiveRoomId, activeRoom, addRoom, renameRoom, deleteRoom } = room;
   const { items, updateItem, updateMultipleItems } = itemsHook;
   const [selectedId, setSelectedId] = useState(furniture[0]?.id);
   const [selectedIds, setSelectedIds] = useState(() => furniture[0]?.id ? [furniture[0].id] : []);
@@ -97,6 +98,15 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
   const [toastMessage, setToastMessage] = useState('');
   const toastTimerRef = useRef(null);
 
+  // 멀티 룸 관리 UI 상태
+  const [isAddingRoom, setIsAddingRoom] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [isRenamingRoom, setIsRenamingRoom] = useState(false);
+  const [roomRenameDraft, setRoomRenameDraft] = useState('');
+
+  const currentRoomId = activeRoomId || rooms[0]?.id || 'room-1';
+  const currentRoom = activeRoom || rooms.find(r => r.id === currentRoomId) || rooms[0];
+
   const showToast = (msg) => {
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     setToastMessage(msg);
@@ -110,19 +120,73 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
       if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
     };
   }, []);
+
   useEffect(() => {
     setIsItemSelectMode(false);
     setSelectedItemIds([]);
     setShowMoveModal(false);
   }, [selectedId, slot]);
+
+  // 방 변경 시 가구 선택 초기화
+  useEffect(() => {
+    if (selectedId === FLOOR_STORAGE.id || selectedId === DOOR_ID) return;
+    const exists = furniture.some(f => f.id === selectedId);
+    if (!exists) {
+      setSelectedId(furniture[0]?.id || null);
+      setSelectedIds(furniture[0]?.id ? [furniture[0].id] : []);
+      setSlot(0);
+    }
+  }, [furniture, selectedId]);
+
   const historyRef = useRef({ past: [], future: [], snapshot: JSON.stringify(furniture) });
-  const [door, setDoor] = useState(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem('cloomy_door'));
-      if (Number.isFinite(saved?.offset) && typeof saved.reversed === 'boolean') return { offset: Math.max(.6, Math.min(ROOM_SIZE - DOOR_WIDTH - .6, saved.offset)), reversed: saved.reversed };
-    } catch { /* Use the right-lower doorway by default. */ }
-    return DEFAULT_DOOR;
-  });
+  const door = room.door || DEFAULT_DOOR;
+  const setDoor = room.setDoor || (() => {});
+
+  const handleSwitchRoom = (roomId) => {
+    if (roomId === activeRoomId) return;
+    if (setActiveRoomId) setActiveRoomId(roomId);
+    setSelectedId(null);
+    setSelectedIds([]);
+    setSlot(0);
+    setIsAddingRoom(false);
+    setIsRenamingRoom(false);
+  };
+
+  const handleAddRoomConfirm = () => {
+    const trimmed = (newRoomName || '').trim();
+    if (!trimmed) return;
+    if (addRoom) addRoom(trimmed);
+    setIsAddingRoom(false);
+    setNewRoomName('');
+    setSelectedId(null);
+    setSelectedIds([]);
+    setSlot(0);
+    showToast(`'${trimmed}' 방을 추가했어요.`);
+  };
+
+  const handleRenameRoomConfirm = () => {
+    const trimmed = (roomRenameDraft || '').trim();
+    if (!trimmed || !currentRoomId) return;
+    if (renameRoom) renameRoom(currentRoomId, trimmed);
+    setIsRenamingRoom(false);
+    showToast(`방 이름을 '${trimmed}'(으)로 변경했어요.`);
+  };
+
+  const handleDeleteRoom = () => {
+    if (rooms.length <= 1) {
+      showToast('최소 1개의 방은 있어야 해요.');
+      return;
+    }
+    const currentName = currentRoom?.name || '현재 방';
+    if (window.confirm(`'${currentName}'을(를) 정말 삭제하시겠습니까? 방 안의 가구 배치도 함께 삭제됩니다.`)) {
+      if (deleteRoom) deleteRoom(currentRoomId);
+      setSelectedId(null);
+      setSelectedIds([]);
+      setSlot(0);
+      showToast(`'${currentName}' 방을 삭제했어요.`);
+    }
+  };
+
   const svgRef = useRef(null);
   const dragRef = useRef(null);
   const resizeRef = useRef(null);
@@ -137,26 +201,45 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     ? (isFloor ? FLOOR_LOCATION : (hasSlots ? locationFor(selected, slot) : selected.name))
     : '';
   const location = currentTargetLocation;
-  const activeItems = items.filter(i => i.status !== 'discarded' && i.status !== 'trading');
-  const placed = activeItems.filter(i => room.locations.includes(i.location));
-  const unplacedItems = activeItems.filter(i => !room.locations.includes(i.location) || i.location === '미분류' || !i.location);
-  const contents = activeItems.filter(i => {
-    if (!selected) return false;
-    if (isFloor) return i.location === FLOOR_LOCATION;
-    if (!hasSlots) {
-      return i.location === selected.name || i.location.startsWith(`${selected.name} · `);
-    }
-    if (i.location === locationFor(selected, slot)) return true;
-    if (slot === 0 && i.location === selected.name) return true;
-    return false;
-  });
-  const candidates = activeItems.filter(i => !contents.some(c => c.id === i.id) && `${i.name} ${i.location}`.toLowerCase().includes(query.toLowerCase()));
+
+  const roomItems = useMemo(() => {
+    return items.filter(i => (i.roomId ? i.roomId === currentRoomId : currentRoomId === (rooms[0]?.id || 'room-1')));
+  }, [items, currentRoomId, rooms]);
+
+  const activeItems = useMemo(() => {
+    return roomItems.filter(i => i.status !== 'discarded' && i.status !== 'trading');
+  }, [roomItems]);
+
+  const placed = useMemo(() => {
+    return activeItems.filter(i => room.locations.includes(i.location));
+  }, [activeItems, room.locations]);
+
+  const unplacedItems = useMemo(() => {
+    return activeItems.filter(i => !room.locations.includes(i.location) || i.location === '미분류' || !i.location);
+  }, [activeItems, room.locations]);
+
+  const contents = useMemo(() => {
+    return activeItems.filter(i => {
+      if (!selected) return false;
+      if (isFloor) return i.location === FLOOR_LOCATION;
+      if (!hasSlots) {
+        return i.location === selected.name || i.location.startsWith(`${selected.name} · `);
+      }
+      if (i.location === locationFor(selected, slot)) return true;
+      if (slot === 0 && i.location === selected.name) return true;
+      return false;
+    });
+  }, [activeItems, selected, isFloor, hasSlots, slot]);
+
+  const candidates = useMemo(() => {
+    return activeItems.filter(i => !contents.some(c => c.id === i.id) && `${i.name} ${i.location}`.toLowerCase().includes(query.toLowerCase()));
+  }, [activeItems, contents, query]);
+
   useEffect(() => { setNameDraft(selected?.name || ''); }, [selected?.id, selected?.name]);
   useEffect(() => {
     const outsideItems = items.filter(item => item.location?.startsWith('현관 밖 신발장'));
     if (outsideItems.length) updateMultipleItems(outsideItems.map(item => ({ id: item.id, location: '미분류' })));
   }, [items, updateMultipleItems]);
-  useEffect(() => { localStorage.setItem('cloomy_door', JSON.stringify(door)); }, [door]);
   useEffect(() => {
     if (!pendingNotice) return;
     setEditing(true);
@@ -557,11 +640,12 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
       setIsItemSelectMode(false);
     }
   };
-  const handleBatchMoveConfirm = ({ targetLocation, newFurniture }) => {
+  const handleBatchMoveConfirm = ({ targetRoomId, targetLocation, newFurniture }) => {
     if (!targetLocation || selectedItemIds.length === 0) return;
+    const destRoomId = targetRoomId || currentRoomId;
 
     if (newFurniture) {
-      const openPos = findOpenPosition(newFurniture.type, furniture) || { x: 1, y: 1 };
+      const openPos = findOpenPosition(newFurniture.type, destRoomId === currentRoomId ? furniture : []) || { x: 1, y: 1 };
       const newId = crypto.randomUUID();
       const newFurnitureObj = {
         id: newId,
@@ -572,15 +656,19 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
         rotated: false,
       };
 
-      setFurniture(prev => [...prev, newFurnitureObj]);
-      updateMultipleItems(selectedItemIds.map(id => ({ id, location: targetLocation })));
-
-      setEditing(true);
-      setSelectedId(newId);
-      setSelectedIds([newId]);
-      setLayoutNotice(`'${newFurniture.name}'을(를) 원하는 위치에 배치해주세요.`);
+      if (destRoomId === currentRoomId) {
+        setFurniture(prev => [...prev, newFurnitureObj]);
+        setEditing(true);
+        setSelectedId(newId);
+        setSelectedIds([newId]);
+        setLayoutNotice(`'${newFurniture.name}'을(를) 원하는 위치에 배치해주세요.`);
+      } else if (room.updateRoomFurniture) {
+        room.updateRoomFurniture(destRoomId, prev => [...prev, newFurnitureObj]);
+        setLayoutNotice(`'${newFurniture.name}' 가구를 추가하고 물건을 이동했어요.`);
+      }
+      updateMultipleItems(selectedItemIds.map(id => ({ id, location: targetLocation, roomId: destRoomId })));
     } else {
-      updateMultipleItems(selectedItemIds.map(id => ({ id, location: targetLocation })));
+      updateMultipleItems(selectedItemIds.map(id => ({ id, location: targetLocation, roomId: destRoomId })));
       setLayoutNotice(`${selectedItemIds.length}개 물건을 '${targetLocation}'(으)로 이동했어요.`);
     }
 
@@ -602,13 +690,13 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
         rotated: false,
       };
       setFurniture(prev => [...prev, newFurnitureObj]);
-      updateMultipleItems(itemIds.map(id => ({ id, location: targetLocation })));
+      updateMultipleItems(itemIds.map(id => ({ id, location: targetLocation, roomId: currentRoomId })));
       setEditing(true);
       setSelectedId(newId);
       setSelectedIds([newId]);
       setLayoutNotice(`'${newFurniture.name}'을(를) 원하는 위치에 배치해주세요.`);
     } else {
-      updateMultipleItems(itemIds.map(id => ({ id, location: targetLocation })));
+      updateMultipleItems(itemIds.map(id => ({ id, location: targetLocation, roomId: currentRoomId })));
       setLayoutNotice(`${itemIds.length}개 물건을 '${targetLocation}'(으)로 배치했어요.`);
     }
   };
@@ -654,10 +742,142 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
         <span>{toastMessage}</span>
       </div>
     )}
+
+    {/* 🏠 멀티 방 관리 바 (방 탭 & 추가/이름변경/삭제) */}
+    <div className="flex items-center justify-between gap-3 p-2.5 sm:p-3 bg-white/90 backdrop-blur-sm border border-[#EDE5DE] rounded-[24px] shadow-xs flex-wrap mb-4">
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5 max-w-full">
+        <span className="text-xs font-black text-[#806F6D] flex items-center gap-1 shrink-0 px-1">
+          <Icon name="room" size={15} />
+          <span>공간:</span>
+        </span>
+        {rooms.map((r) => {
+          const isSelected = r.id === currentRoomId;
+          const count = items.filter(i => (i.roomId ? i.roomId === r.id : r.id === (rooms[0]?.id || 'room-1'))).length;
+          return (
+            <button
+              key={r.id}
+              type="button"
+              onClick={() => handleSwitchRoom(r.id)}
+              className={`fluffy-button px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-extrabold transition-all flex items-center gap-1.5 shrink-0 ${
+                isSelected
+                  ? 'bg-[#B56562] text-white shadow-xs'
+                  : 'bg-[#FAF8F5] text-[#6D5A57] hover:bg-[#FFF5EE] border border-[#EDE5DE]'
+              }`}
+            >
+              <Icon name="door" size={13} />
+              <span>{r.name}</span>
+              <span className={`text-xs px-1.5 py-0.2 rounded-full font-bold ${isSelected ? 'bg-white/25 text-white' : 'bg-[#EFE7E2] text-[#806F6D]'}`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+
+        {!isAddingRoom ? (
+          <button
+            type="button"
+            onClick={() => { setIsAddingRoom(true); setNewRoomName(''); }}
+            className="fluffy-button px-3 py-1.5 rounded-full text-xs font-extrabold bg-[#FAF8F5] text-[#806F6D] hover:text-[#B56562] hover:bg-[#FFF0EE] border border-dashed border-[#DACCC7] flex items-center gap-1 shrink-0 transition-all"
+            title="새로운 방 추가"
+          >
+            <Icon name="plus" size={13} />
+            <span>방 추가</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1.5 bg-[#FFF5EE] p-1 rounded-full border border-[#FFDAC1] shrink-0 animate-fadeIn">
+            <input
+              type="text"
+              value={newRoomName}
+              onChange={e => setNewRoomName(e.target.value)}
+              placeholder="새 방 이름"
+              autoFocus
+              className="px-2.5 py-0.5 text-xs font-bold text-[#4A3E3D] bg-transparent border-none focus:outline-none w-28"
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleAddRoomConfirm();
+                if (e.key === 'Escape') setIsAddingRoom(false);
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleAddRoomConfirm}
+              className="fluffy-button px-2.5 py-0.8 bg-[#B56562] text-white text-xs font-extrabold rounded-full"
+            >
+              추가
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsAddingRoom(false)}
+              className="fluffy-button px-2 py-0.8 text-xs font-bold text-[#806F6D] hover:text-[#4A3E3D]"
+            >
+              취소
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* 현재 선택된 방 관리 액션 (이름 변경, 삭제) */}
+      <div className="flex items-center gap-1.5 ml-auto shrink-0">
+        {!isRenamingRoom ? (
+          <button
+            type="button"
+            onClick={() => {
+              setIsRenamingRoom(true);
+              setRoomRenameDraft(currentRoom?.name || '');
+            }}
+            className="fluffy-button px-2.5 py-1 text-xs font-bold text-[#806F6D] hover:text-[#4A3E3D] hover:bg-[#FAF8F5] rounded-xl flex items-center gap-1 border border-transparent hover:border-[#EDE5DE]"
+            title="현재 방 이름 변경"
+          >
+            <Icon name="pencil" size={12} />
+            <span>이름 변경</span>
+          </button>
+        ) : (
+          <div className="flex items-center gap-1 bg-[#FFF5EE] p-1 rounded-xl border border-[#FFDAC1] animate-fadeIn">
+            <input
+              type="text"
+              value={roomRenameDraft}
+              onChange={e => setRoomRenameDraft(e.target.value)}
+              autoFocus
+              className="px-2 py-0.5 text-xs font-bold text-[#4A3E3D] bg-transparent border-none focus:outline-none w-24"
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleRenameRoomConfirm();
+                if (e.key === 'Escape') setIsRenamingRoom(false);
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleRenameRoomConfirm}
+              className="fluffy-button px-2 py-0.8 bg-[#4A3E3D] text-white text-xs font-extrabold rounded-lg"
+            >
+              저장
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsRenamingRoom(false)}
+              className="fluffy-button px-1.5 py-0.8 text-xs font-bold text-[#806F6D]"
+            >
+              ✕
+            </button>
+          </div>
+        )}
+
+        {rooms.length > 1 && (
+          <button
+            type="button"
+            onClick={handleDeleteRoom}
+            className="fluffy-button px-2.5 py-1 text-xs font-bold text-[#B55B59] hover:bg-[#FFE9E7] rounded-xl flex items-center gap-1 transition-colors"
+            title="현재 방 삭제"
+          >
+            <Icon name="trash" size={12} />
+            <span>방 삭제</span>
+          </button>
+        )}
+      </div>
+    </div>
+
     <div className="room-heading">
       <div>
         <p className="room-eyebrow">MY LITTLE SPACE</p>
-        <h2>내 방, 한눈에</h2>
+        <h2>{currentRoom?.name || '내 방'}, 한눈에</h2>
         <p>방 안의 가구와 물건 위치를 한곳에서 찾아보세요.</p>
       </div>
       <div className="room-heading-actions">
@@ -853,7 +1073,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
             </div>
           )}
           <button className="room-button primary full" onClick={() => setAdding(!adding)}>{adding ? '물건 선택 닫기' : '+ 등록한 물건 넣기'}</button>
-          {adding && <div className="room-picker"><input aria-label="등록한 물건 검색" placeholder="물건 이름 또는 위치 검색" value={query} onChange={e => setQuery(e.target.value)} /><p className="room-muted">다른 위치의 물건은 여기로 이동해요.</p><ul className="room-item-list">{candidates.map(item => <li key={item.id}><span className="room-item-icon">{getCategoryIcon(item)}</span><div><b>{item.name}</b><small>{item.location}</small></div><button onClick={() => updateItem(item.id, { location: currentTargetLocation })}>넣기</button></li>)}</ul>{!candidates.length && <p className="room-muted">넣을 수 있는 물건이 없어요.</p>}</div>}
+          {adding && <div className="room-picker"><input aria-label="등록한 물건 검색" placeholder="물건 이름 또는 위치 검색" value={query} onChange={e => setQuery(e.target.value)} /><p className="room-muted">다른 위치의 물건은 여기로 이동해요.</p><ul className="room-item-list">{candidates.map(item => <li key={item.id}><span className="room-item-icon">{getCategoryIcon(item)}</span><div><b>{item.name}</b><small>{item.location}</small></div><button onClick={() => updateItem(item.id, { location: currentTargetLocation, roomId: currentRoomId })}>넣기</button></li>)}</ul>{!candidates.length && <p className="room-muted">넣을 수 있는 물건이 없어요.</p>}</div>}
           <button className="room-scan-link" onClick={onScan}>새 물건 스캔하기 ↗</button>
         </>}
       </section>
@@ -871,6 +1091,8 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
       <MoveItemsModal
         selectedItemCount={selectedItemIds.length}
         currentLocation={currentTargetLocation}
+        rooms={rooms}
+        activeRoomId={currentRoomId}
         roomFurniture={furniture}
         onConfirm={handleBatchMoveConfirm}
         onClose={() => setShowMoveModal(false)}

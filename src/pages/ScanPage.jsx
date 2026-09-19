@@ -3,6 +3,7 @@ import Camera from '../components/Camera';
 import ItemList from '../components/ItemList';
 import { analyzeImage } from '../services/gemini';
 import { cropObjectThumbnail } from '../utils/cropThumbnail';
+import Icon from '../components/Icon';
 
 const CATEGORIES = ['책', '의류', '전자기기', '식기', '문구', '화장품', '장식품', '식품', '잡화', '기타'];
 const CATEGORY_EMOJI = { '책': '📚', '의류': '👕', '전자기기': '📱', '식기': '🍽️', '문구': '✏️', '화장품': '💄', '장식품': '🎀', '식품': '🍎', '잡화': '📦', '기타': '📦' };
@@ -33,7 +34,16 @@ function loadImage(dataUrl) {
   });
 }
 
-export default function ScanPage({ itemsHook, onRegistered, roomFurniture = [], onUnsavedChange, onAddSlot }) {
+export default function ScanPage({
+  itemsHook,
+  onRegistered,
+  rooms = [],
+  activeRoomId = null,
+  roomFurniture = [],
+  onUnsavedChange,
+  onAddSlot,
+  onAddRoom,
+}) {
   const { addItems, updateMultipleItems, items: existingItems } = itemsHook;
   const [step, setStep] = useState('camera'); // camera | loading | results | manual
   const [recognizedItems, setRecognizedItems] = useState([]);
@@ -88,23 +98,24 @@ export default function ScanPage({ itemsHook, onRegistered, roomFurniture = [], 
     }
   };
 
-  const handleSave = (selectedItems, location, meta = {}, resolutionPlan = null) => {
+  const handleSave = (selectedItems, location, meta = {}, resolutionPlan = null, targetRoomId = null) => {
     try {
+      const finalRoomId = targetRoomId || meta.roomId || activeRoomId || (rooms[0]?.id || null);
       if (resolutionPlan) {
         if (resolutionPlan.itemsToUpdate && resolutionPlan.itemsToUpdate.length > 0) {
           updateMultipleItems(resolutionPlan.itemsToUpdate);
         }
         if (resolutionPlan.itemsToAdd && resolutionPlan.itemsToAdd.length > 0) {
-          addItems(resolutionPlan.itemsToAdd, location);
+          addItems(resolutionPlan.itemsToAdd, location, finalRoomId);
         }
       } else if (selectedItems && selectedItems.length > 0) {
-        addItems(selectedItems, location);
+        addItems(selectedItems, location, finalRoomId);
       }
       setStep('camera');
       setRecognizedItems([]);
       setCurrentPhoto(null);
       setManualItems([]);
-      if (onRegistered) onRegistered(meta);
+      if (onRegistered) onRegistered({ ...meta, roomId: finalRoomId });
     } catch (err) {
       console.error('Save error:', err);
       alert('물건 저장 중 오류가 발생했습니다.');
@@ -152,7 +163,7 @@ export default function ScanPage({ itemsHook, onRegistered, roomFurniture = [], 
           <div className="absolute top-0 left-0 w-16 h-16 border-4 border-[#FFB7B2] rounded-full border-t-transparent animate-spin"></div>
         </div>
         <p className="text-[#806F6D] font-medium">AI가 물건을 인식하고 있어요...</p>
-        <p className="text-sm text-[#9A8784]">잠시만 기다려주세요 🔍</p>
+        <p className="text-sm text-[#9A8784]">잠시만 기다려주세요</p>
       </div>
     );
   }
@@ -170,10 +181,13 @@ export default function ScanPage({ itemsHook, onRegistered, roomFurniture = [], 
           items={recognizedItems}
           onSave={handleSave}
           onCancel={handleCancel}
+          rooms={rooms}
+          activeRoomId={activeRoomId}
           roomFurniture={roomFurniture}
           cancelLabel={currentPhoto ? '다시 찍기' : '← 돌아가기'}
           existingItems={existingItems}
           onAddSlot={onAddSlot}
+          onAddRoom={onAddRoom}
         />
       </div>
     );
@@ -256,7 +270,7 @@ export default function ScanPage({ itemsHook, onRegistered, roomFurniture = [], 
     <div className="flex flex-col justify-start max-w-md sm:max-w-lg md:max-w-[560px] mx-auto w-full pb-2">
       <div className="text-center mb-2.5 shrink-0">
         <h2 className="text-xl sm:text-2xl font-black text-[#4A3E3D]">물건 스캔</h2>
-        <p className="text-xs sm:text-sm text-[#806F6D] mt-0.5">정리할 구역이나 물건을 사진 찍어주세요 📸</p>
+        <p className="text-xs sm:text-sm text-[#806F6D] mt-0.5">정리할 구역이나 물건을 촬영해주세요</p>
       </div>
       {error && (
         <div className="w-full mb-3 p-3 rounded-[20px] bg-[#FFE9E7] text-[#B55B59] text-xs sm:text-sm font-bold shadow-xs border border-[#FFD0CC] shrink-0">
@@ -268,9 +282,9 @@ export default function ScanPage({ itemsHook, onRegistered, roomFurniture = [], 
         <button
           type="button"
           onClick={() => setStep('manual')}
-          className="fluffy-button w-full py-2.5 sm:py-3 bg-white hover:bg-[#FFF5EE] text-[#806F6D] hover:text-[#4A3E3D] font-bold text-xs sm:text-sm shadow-[0_6px_18px_rgba(74,62,61,0.06)] border border-[#F4EEEA] transition-all flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[22px]"
+          className="fluffy-button w-full py-2.5 sm:py-3 bg-white hover:bg-[#FFF5EE] text-[#806F6D] hover:text-[#4A3E3D] font-bold text-xs sm:text-sm shadow-[0_6px_18px_rgba(74,62,61,0.06)] border border-[#F4EEEA] transition-all flex items-center justify-center gap-2 rounded-[20px] sm:rounded-[22px] cursor-pointer"
         >
-          <span>✏️</span>
+          <Icon name="pencil" size={16} />
           <span>스캔 없이 수동으로 물건 추가</span>
         </button>
       </div>

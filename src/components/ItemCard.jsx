@@ -44,6 +44,8 @@ export default function ItemCard({
   onDirectEdit,
   otherItems = [],
   onBatchRecalibrate,
+  rooms = [],
+  activeRoomId = null,
   roomFurniture = [],
   viewMode = 'list',
   isDeclutterMode = false,
@@ -165,10 +167,10 @@ export default function ItemCard({
             <div className="flex flex-wrap items-center gap-1.5 mt-2.5 min-h-[1.75rem]">
               <span
                 className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE] truncate max-w-full flex items-center gap-1"
-                title={item.location || '미분류'}
+                title={`${roomPrefix}${item.location || '미분류'}`}
               >
                 <Icon name="pin" size={11} className="shrink-0 text-[#B56562]" />
-                <span className="truncate">{item.location || '미분류'}</span>
+                <span className="truncate">{roomPrefix}{item.location || '미분류'}</span>
               </span>
               <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE]">
                 📏 {sizeLabels[item.size] || item.size}
@@ -221,6 +223,8 @@ export default function ItemCard({
             onClose={() => setIsEditing(false)}
             otherItems={otherItems}
             onBatchRecalibrate={onBatchRecalibrate}
+            rooms={rooms}
+            activeRoomId={activeRoomId}
             roomFurniture={roomFurniture}
             onAddSlot={onAddSlot}
           />
@@ -326,12 +330,15 @@ export default function ItemCard({
 
             {/* 위치 & 크기 칩 */}
             <div className="flex flex-wrap items-center gap-2 mt-2">
-              <span className="text-xs font-medium px-3 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE] truncate max-w-full flex items-center gap-1">
+              <span
+                className="text-xs font-medium px-3 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE] truncate max-w-full flex items-center gap-1"
+                title={`${roomPrefix}${item.location || '미분류'}`}
+              >
                 <Icon name="pin" size={12} className="inline mr-0.5 text-[#B56562]" />
-                <span className="truncate">{item.location || '미분류'}</span>
+                <span className="truncate">{roomPrefix}{item.location || '미분류'}</span>
               </span>
               <span className="text-xs font-medium px-3 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE]">
-                📏 {sizeLabels[item.size] || item.size}
+                {sizeLabels[item.size] || item.size}
               </span>
               {item.status && item.status !== 'active' && (
                 <span
@@ -360,7 +367,7 @@ export default function ItemCard({
                     e.stopPropagation();
                     handleUsageChange(cfg.id);
                   }}
-                  className={`w-7 h-7 rounded-full text-xs font-bold transition-all flex items-center justify-center ${
+                  className={`w-7 h-7 rounded-full text-xs font-bold transition-all flex items-center justify-center cursor-pointer ${
                     isUsageSelected
                       ? `${cfg.badgeClass} border shadow-xs scale-105`
                       : 'text-[#9C8B88] hover:text-[#4A3E3D] hover:bg-[#FFF0EE]'
@@ -382,6 +389,8 @@ export default function ItemCard({
           onClose={() => setIsEditing(false)}
           otherItems={otherItems}
           onBatchRecalibrate={onBatchRecalibrate}
+          rooms={rooms}
+          activeRoomId={activeRoomId}
           roomFurniture={roomFurniture}
           onAddSlot={onAddSlot}
         />

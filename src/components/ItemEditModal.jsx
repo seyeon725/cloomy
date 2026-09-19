@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react';
 import { recalibrateItemSizes } from '../services/gemini';
-import { FURNITURE, slotCount, slotName, FLOOR_LOCATION } from '../hooks/useRoom';
+import { slotCount, slotName, FLOOR_LOCATION } from '../hooks/useRoom';
 import { USAGE_CONFIG } from '../hooks/useItems';
+import Icon from './Icon';
 
 const CATEGORIES = [
   { name: '책', emoji: '📚' },
@@ -19,14 +20,14 @@ const CATEGORIES = [
 const SIZES = [
   { id: 'tiny', label: '아주 작음' },
   { id: 'small', label: '작음' },
-  { id: 'medium', label: '보통' },
+  { id: 'medium', label: '중간' },
   { id: 'large', label: '큼' },
 ];
 
 const sizeNameMap = {
   tiny: '아주 작음',
   small: '작음',
-  medium: '보통',
+  medium: '중간',
   large: '큼',
 };
 
@@ -36,9 +37,12 @@ export default function ItemEditModal({
   onClose,
   otherItems = [],
   onBatchRecalibrate,
+  rooms = [],
+  activeRoomId = null,
   roomFurniture = [],
   onAddSlot,
 }) {
+  const [selectedRoomId, setSelectedRoomId] = useState(() => item.roomId || activeRoomId || rooms[0]?.id || 'room-1');
   const [name, setName] = useState(item.name || '');
   const [category, setCategory] = useState(item.category || '기타');
   const [size, setSize] = useState(item.size || 'small');
@@ -47,6 +51,12 @@ export default function ItemEditModal({
   // 상대적 크기 재조정 프롬프트 상태
   const [showPrompt, setShowPrompt] = useState(false);
   const [isRecalibrating, setIsRecalibrating] = useState(false);
+
+  const currentRoom = useMemo(() => {
+    return rooms.find((r) => r.id === selectedRoomId) || rooms[0] || null;
+  }, [rooms, selectedRoomId]);
+
+  const activeFurnList = currentRoom?.furniture || roomFurniture;
 
   // 초기 위치 파싱 (방 가구와 매칭)
   const initial = useMemo(() => {
@@ -57,7 +67,7 @@ export default function ItemEditModal({
     if (raw === FLOOR_LOCATION) {
       return { furnitureId: 'floor-storage', slotIndex: null, custom: '', isCustom: false };
     }
-    for (const f of roomFurniture) {
+    for (const f of activeFurnList) {
       if (raw === f.name) {
         return { furnitureId: f.id, slotIndex: 0, custom: '', isCustom: false };
       }
@@ -69,7 +79,7 @@ export default function ItemEditModal({
       }
     }
     return { furnitureId: null, slotIndex: null, custom: raw, isCustom: true };
-  }, [item.location, roomFurniture]);
+  }, [item.location, activeFurnList]);
 
   const [selectedFurnitureId, setSelectedFurnitureId] = useState(initial.furnitureId);
   const [selectedSlotIndex, setSelectedSlotIndex] = useState(initial.slotIndex);
@@ -77,7 +87,16 @@ export default function ItemEditModal({
   const [customLocation, setCustomLocation] = useState(initial.custom);
   const [location, setLocation] = useState(item.location || '');
 
-  const selectedFurniture = roomFurniture.find((f) => f.id === selectedFurnitureId);
+  const handleSelectRoom = (roomId) => {
+    if (selectedRoomId === roomId) return;
+    setSelectedRoomId(roomId);
+    setSelectedFurnitureId(null);
+    setSelectedSlotIndex(null);
+    setIsCustom(false);
+    setLocation('');
+  };
+
+  const selectedFurniture = activeFurnList.find((f) => f.id === selectedFurnitureId);
 
   const effectiveSlots = (f) => (f ? slotCount(f) : 0);
 
@@ -135,6 +154,7 @@ export default function ItemEditModal({
       size,
       description: description.trim(),
       location: finalLocation,
+      roomId: selectedRoomId,
       usage,
     };
   };
@@ -165,36 +185,47 @@ export default function ItemEditModal({
     }
   };
 
-  // 1. 단일 아이템만 저장
+  const handleRecalibrateAll = async () => {
+    setIsRecalibrating(true);
+    try {
+      const allItemsToRecalibrate = [
+        { ...item, name: name.trim(), category, size, description: description.trim(), location: isCustom ? (customLocation.trim() || '미분류') : (location || '미분류'), roomId: selectedRoomId, usage },
+        ...otherSceneItems,
+      ];
+
+      const results = await recalibrateItemSizes(allItemsToRecalibrate, name.trim(), size);
+      if (results && results.length > 0) {
+        onBatchRecalibrate(
+          { ...item, name: name.trim(), category, size, description: description.trim(), location: isCustom ? (customLocation.trim() || '미분류') : (location || '미분류'), roomId: selectedRoomId, usage },
+          results
+        );
+      } else {
+        onSave(getFinalItem());
+      }
+    } catch (err) {
+      console.error('Recalibrate error:', err);
+      onSave(getFinalItem());
+    } finally {
+      setIsRecalibrating(false);
+      onClose();
+    }
+  };
+
   const handleSaveOnlyThis = () => {
     onSave(getFinalItem());
     onClose();
   };
 
-  // 2. 다른 물건들도 상대적 크기로 AI 일괄 재계산
-  const handleRecalibrateAll = async () => {
-    const finalItem = getFinalItem();
-    setIsRecalibrating(true);
-    try {
-      const allSceneItems = [finalItem, ...otherSceneItems];
-      const updatedList = await recalibrateItemSizes(finalItem, size, allSceneItems);
-
-      // 부모 컴포넌트에 일괄 업데이트 전달
-      onBatchRecalibrate(finalItem, updatedList);
-      onClose();
-    } catch (err) {
-      console.error('Failed to recalibrate relative sizes:', err);
-      alert('상대적 크기 계산 중 오류가 발생했습니다. 이 물건의 크기만 저장합니다.');
-      onSave(finalItem);
-      onClose();
-    } finally {
-      setIsRecalibrating(false);
-    }
-  };
-
   return (
-    <div className="fixed inset-0 z-50 bg-[#4A3E3D]/35 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-white rounded-[32px] max-w-lg w-full p-6 shadow-[0_20px_60px_rgba(74,62,61,0.2)] max-h-[90vh] overflow-y-auto space-y-6">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#4A3E3D]/40 backdrop-blur-sm p-4 overflow-y-auto"
+      role="dialog"
+      aria-modal="true"
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-lg fluffy-card rounded-[32px] p-6 sm:p-7 my-8 animate-[fade-in-up_200ms_ease-out]">
         {/* 상대적 크기 자동 보정 질문 프롬프트 뷰 */}
         {showPrompt ? (
           <div className="py-4 space-y-5 text-center">
@@ -235,14 +266,14 @@ export default function ItemEditModal({
                 <button
                   type="button"
                   onClick={handleRecalibrateAll}
-                  className="fluffy-button w-full py-4 px-5 bg-[#FFB7B2] font-extrabold text-base text-[#4A3E3D] shadow-[0_10px_24px_rgba(255,183,178,0.4)] flex items-center justify-center gap-2"
+                  className="fluffy-button w-full py-4 px-5 bg-[#FFB7B2] font-extrabold text-base text-[#4A3E3D] shadow-[0_10px_24px_rgba(255,183,178,0.4)] flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <span>✨ 네, 상대적 크기에 맞춰 자동 변경</span>
+                  <span>네, 상대적 크기에 맞춰 자동 변경</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleSaveOnlyThis}
-                  className="fluffy-button w-full py-3.5 px-5 bg-[#FAF8F5] font-bold text-sm sm:text-base text-[#806F6D]"
+                  className="fluffy-button w-full py-3.5 px-5 bg-[#FAF8F5] font-bold text-sm sm:text-base text-[#806F6D] cursor-pointer"
                 >
                   아니요, 이 물건만 변경할게요
                 </button>
@@ -252,11 +283,14 @@ export default function ItemEditModal({
         ) : (
           <>
             <div className="flex items-center justify-between pb-3">
-              <h3 className="text-xl font-bold text-[#4A3E3D]">✏️ 물건 정보 수정</h3>
+              <h3 className="text-xl font-bold text-[#4A3E3D] flex items-center gap-2">
+                <Icon name="pencil" size={18} />
+                <span>물건 정보 수정</span>
+              </h3>
               <button
                 type="button"
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 text-2xl px-2"
+                className="text-gray-400 hover:text-gray-600 text-2xl px-2 cursor-pointer"
               >
                 ✕
               </button>
@@ -350,60 +384,102 @@ export default function ItemEditModal({
               {/* 위치 */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-bold text-gray-700">
-                    보관 위치
+                  <label className="block text-sm font-bold text-gray-700 flex items-center gap-1.5">
+                    <Icon name="pin" size={16} />
+                    <span>보관 위치</span>
                   </label>
                   {(isCustom ? customLocation.trim() : location) && (
-                    <span className="text-xs font-bold px-2.5 py-1 bg-[#FFF0EE] text-[#B56562] rounded-full truncate max-w-[200px]">
-                      {isCustom ? (customLocation.trim() || '직접 입력') : location}
+                    <span className="text-xs font-bold px-2.5 py-1 bg-[#FFF0EE] text-[#B56562] rounded-full truncate max-w-[220px]">
+                      {currentRoom?.name ? `${currentRoom.name} > ` : ''}{isCustom ? (customLocation.trim() || '직접 입력') : location}
                     </span>
                   )}
                 </div>
 
-                <div className="flex flex-wrap gap-2 mb-2">
-                  <button
-                    type="button"
-                    onClick={selectFloor}
-                    className={`fluffy-button px-3.5 py-2 text-xs font-semibold ${
-                      !isCustom && selectedFurnitureId === 'floor-storage'
-                        ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_6px_16px_rgba(255,183,178,0.35)]'
-                        : 'bg-[#FAF8F5] text-[#806F6D]'
-                    }`}
-                  >
-                    바닥 보관
-                  </button>
-                  {roomFurniture.map((f) => (
+                {/* 1단계: 보관할 방 선택 */}
+                {rooms.length > 0 && (
+                  <div className="mb-3 pb-2.5 border-b border-[#F4EEEA]">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-xs font-bold text-[#806F6D] flex items-center gap-1">
+                        <Icon name="room" size={14} />
+                        <span>1단계 · 보관할 방 선택</span>
+                      </span>
+                      {currentRoom && (
+                        <span className="text-[11px] text-[#9A8784]">
+                          선택: <b className="text-[#8F5E4D]">{currentRoom.name}</b>
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {rooms.map(r => (
+                        <button
+                          key={r.id}
+                          type="button"
+                          onClick={() => handleSelectRoom(r.id)}
+                          className={`fluffy-button px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer ${
+                            selectedRoomId === r.id
+                              ? 'bg-[#B56562] text-white shadow-xs font-bold'
+                              : 'bg-[#FAF8F5] text-[#806F6D] hover:bg-[#FFF0EE]'
+                          }`}
+                        >
+                          {r.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2단계: 가구 선택 */}
+                <div className="mb-2">
+                  <span className="text-xs font-bold text-[#806F6D] flex items-center gap-1 mb-1.5">
+                    <Icon name="box" size={14} />
+                    <span>2단계 · {currentRoom?.name || '방'} 안의 가구 선택</span>
+                  </span>
+                  <div className="flex flex-wrap gap-2">
                     <button
                       type="button"
-                      key={f.id}
-                      onClick={() => selectFurniture(f)}
-                      className={`fluffy-button px-3.5 py-2 text-xs font-semibold ${
-                        !isCustom && selectedFurnitureId === f.id
-                          ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_6px_16px_rgba(255,183,178,0.35)]'
+                      onClick={selectFloor}
+                      className={`fluffy-button px-3.5 py-2 text-xs font-semibold cursor-pointer ${
+                        !isCustom && selectedFurnitureId === 'floor-storage'
+                          ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_6px_16px_rgba(255,183,178,0.35)] font-bold'
                           : 'bg-[#FAF8F5] text-[#806F6D]'
                       }`}
                     >
-                      {f.name}
+                      바닥 보관
                     </button>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={selectCustom}
-                    className={`fluffy-button px-3.5 py-2 text-xs font-semibold ${
-                      isCustom
-                        ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_6px_16px_rgba(255,183,178,0.35)]'
-                        : 'bg-[#FAF8F5] text-[#806F6D]'
-                    }`}
-                  >
-                    + 직접 입력
-                  </button>
+                    {activeFurnList.map((f) => (
+                      <button
+                        type="button"
+                        key={f.id}
+                        onClick={() => selectFurniture(f)}
+                        className={`fluffy-button px-3.5 py-2 text-xs font-semibold cursor-pointer ${
+                          !isCustom && selectedFurnitureId === f.id
+                            ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_6px_16px_rgba(255,183,178,0.35)] font-bold'
+                            : 'bg-[#FAF8F5] text-[#806F6D]'
+                        }`}
+                      >
+                        {f.name}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={selectCustom}
+                      className={`fluffy-button px-3.5 py-2 text-xs font-semibold cursor-pointer ${
+                        isCustom
+                          ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_6px_16px_rgba(255,183,178,0.35)] font-bold'
+                          : 'bg-[#FAF8F5] text-[#806F6D]'
+                      }`}
+                    >
+                      + 직접 입력
+                    </button>
+                  </div>
                 </div>
 
-                {/* 칸 선택 서브 메뉴 */}
+                {/* 3단계: 칸 선택 서브 메뉴 */}
                 {!isCustom && selectedFurniture && selectedFurnitureId !== 'floor-storage' && (
                   <div className="flex flex-wrap items-center gap-1.5 p-2.5 bg-[#FAF8F5] rounded-2xl mb-2 border border-[#F4EEEA]">
-                    <span className="text-xs text-[#806F6D] font-bold mr-1">
-                      {selectedFurniture.name} 칸 선택:
+                    <span className="text-xs text-[#806F6D] font-bold mr-1 flex items-center gap-1">
+                      <Icon name="layers" size={13} />
+                      <span>3단계 · {selectedFurniture.name} 칸 선택:</span>
                     </span>
                     {effectiveSlots(selectedFurniture) > 0 ? (
                       Array.from({ length: effectiveSlots(selectedFurniture) }, (_, i) => (

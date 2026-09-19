@@ -1,8 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import {
+  isFirebaseConfigured,
+  saveItemsToCloud,
+  loadItemsFromCloud,
+  subscribeItemsCloud,
+} from '../services/firebase';
 
 const BASE_KEY = 'cloomy_items';
-const LEGACY_STORAGE_KEY = 'jeongnijjang_items';
 
 /** userId에 따라 스토리지 키를 결정 */
 function storageKey(userId) {
@@ -76,26 +81,80 @@ export const USAGE_CONFIG = {
 
 export function useItems(userId) {
   const [items, setItems] = useState(() => loadItems(userId));
-  const [loading, setLoading] = useState(false);
   const prevUserId = useRef(userId);
+  const cloudDebounceRef = useRef(null);
+  const isSyncingFromCloudRef = useRef(false);
 
-  // userId 변경 시 해당 사용자의 데이터 로드
+  // userId 변경 시 해당 사용자의 데이터 로드 및 클라우드 동기화
   useEffect(() => {
     if (prevUserId.current !== userId) {
       prevUserId.current = userId;
       setItems(loadItems(userId));
     }
+
+    if (!isFirebaseConfigured || !userId || userId === 'guest') {
+      return;
+    }
+
+    let isMounted = true;
+
+    // 1) 클라우드 데이터 확인 및 로컬 데이터 마이그레이션
+    loadItemsFromCloud(userId).then((cloudItems) => {
+      if (!isMounted) return;
+      if (Array.isArray(cloudItems) && cloudItems.length > 0) {
+        isSyncingFromCloudRef.current = true;
+        setItems(cloudItems);
+        saveItems(cloudItems, userId);
+        setTimeout(() => {
+          isSyncingFromCloudRef.current = false;
+        }, 300);
+      } else {
+        // 클라우드에 데이터가 없으면 현재 로컬 데이터를 클라우드에 최초 백업
+        const local = loadItems(userId);
+        if (local.length > 0) {
+          saveItemsToCloud(userId, local);
+        }
+      }
+    });
+
+    // 2) 실시간 클라우드 동기화 구독
+    const unsubscribe = subscribeItemsCloud(userId, (cloudItems) => {
+      if (!isMounted) return;
+      isSyncingFromCloudRef.current = true;
+      setItems(cloudItems);
+      saveItems(cloudItems, userId);
+      setTimeout(() => {
+        isSyncingFromCloudRef.current = false;
+      }, 300);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [userId]);
 
+  // 로컬 저장 및 클라우드 디바운스 백업
   useEffect(() => {
     saveItems(items, userId);
+
+    if (!isSyncingFromCloudRef.current && isFirebaseConfigured && userId && userId !== 'guest') {
+      if (cloudDebounceRef.current) clearTimeout(cloudDebounceRef.current);
+      cloudDebounceRef.current = setTimeout(() => {
+        saveItemsToCloud(userId, items);
+      }, 600);
+    }
+    return () => {
+      if (cloudDebounceRef.current) clearTimeout(cloudDebounceRef.current);
+    };
   }, [items, userId]);
 
-  const addItems = useCallback((newItems, location) => {
+  const addItems = useCallback((newItems, location, roomId = null) => {
     const itemsWithMeta = newItems.map((item) => ({
       ...item,
       id: uuidv4(),
       location: location || '미분류',
+      roomId: item.roomId || roomId || null,
       status: 'active',
       createdAt: new Date().toISOString(),
       lastUsedAt: null,
@@ -132,6 +191,17 @@ export function useItems(userId) {
 
   const getItemsByLocation = useCallback(
     (location) => items.filter((item) => item.location === location),
+    [items]
+  );
+
+  const getItemsByRoom = useCallback(
+    (roomId, defaultRoomId) => {
+      if (!roomId || roomId === 'all') return items;
+      return items.filter((item) => {
+        if (item.roomId) return item.roomId === roomId;
+        return defaultRoomId ? roomId === defaultRoomId : true;
+      });
+    },
     [items]
   );
 
@@ -172,6 +242,7 @@ export function useItems(userId) {
     removeItem,
     removeMultipleItems,
     getItemsByLocation,
+    getItemsByRoom,
     getLocations,
     getStats,
   };

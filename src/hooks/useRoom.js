@@ -1,4 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
+import {
+  isFirebaseConfigured,
+  saveRoomsToCloud,
+  loadRoomsFromCloud,
+  subscribeRoomsCloud,
+} from '../services/firebase';
 
 export const FURNITURE = {
   drawers: { label: '서랍장', w: 2.2, d: 1.3, h: 1.5, color: '#c99c7a', slots: 3, configurableSlots: true },
@@ -69,13 +75,27 @@ export const findOpenPosition = (type, currentFurniture) => {
   }
   return null;
 };
-const roomKey = (userId) => {
+export const DEFAULT_DOOR = { offset: 3, reversed: false };
+export const ROOM_PRESETS = ['내 방', '거실', '침실', '서재', '드레스룸', '주방', '아이방'];
+
+const roomsKey = (userId) => {
+  if (!userId || userId === 'guest') return 'cloomy_rooms';
+  return `cloomy_rooms_${userId}`;
+};
+
+const activeRoomKey = (userId) => {
+  if (!userId || userId === 'guest') return 'cloomy_active_room_id';
+  return `cloomy_active_room_id_${userId}`;
+};
+
+const legacyRoomKey = (userId) => {
   if (!userId || userId === 'guest') return 'cloomy_room';
   return `cloomy_room_${userId}`;
 };
-const loadRoom = (userId) => {
+
+const loadLegacyFurniture = (userId) => {
   try {
-    const saved = JSON.parse(localStorage.getItem(roomKey(userId)));
+    const saved = JSON.parse(localStorage.getItem(legacyRoomKey(userId)));
     const insideRoomOnly = Array.isArray(saved) ? saved.filter(f => f.type !== 'shoeCabinet' && f.type !== 'floorStorage' && f.type !== 'vanity') : saved;
     if (Array.isArray(insideRoomOnly) && insideRoomOnly.every(f => FURNITURE[f.type] && typeof f.id === 'string' && typeof f.name === 'string' && Number.isFinite(f.x) && Number.isFinite(f.y))) {
       const migrated = insideRoomOnly.map(f => {
@@ -85,29 +105,321 @@ const loadRoom = (userId) => {
       });
       return separateFurniture(migrated);
     }
-  } catch { /* Use the starter layout if saved data is invalid. */ }
+  } catch { /* Fallback */ }
   return separateFurniture(initial);
 };
+
+const loadLegacyDoor = () => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('cloomy_door'));
+    if (Number.isFinite(saved?.offset) && typeof saved.reversed === 'boolean') {
+      return { offset: Math.max(.6, Math.min(ROOM_SIZE - 2.4 - .6, saved.offset)), reversed: saved.reversed };
+    }
+  } catch { /* Fallback */ }
+  return DEFAULT_DOOR;
+};
+
+const sanitizeRoom = (room, index) => {
+  const id = room.id || `room-${index + 1}`;
+  const name = typeof room.name === 'string' && room.name.trim() ? room.name.trim() : (index === 0 ? '내 방' : `방 ${index + 1}`);
+  const rawFurn = Array.isArray(room.furniture) ? room.furniture : [];
+  const validFurn = rawFurn.filter(f => FURNITURE[f.type] && typeof f.id === 'string' && typeof f.name === 'string' && Number.isFinite(f.x) && Number.isFinite(f.y));
+  const furniture = separateFurniture(validFurn.length > 0 ? validFurn : (index === 0 ? initial : []));
+  const door = room.door && Number.isFinite(room.door.offset) ? room.door : DEFAULT_DOOR;
+  return {
+    id,
+    name,
+    furniture,
+    door,
+    createdAt: room.createdAt || new Date().toISOString(),
+  };
+};
+
+const loadRooms = (userId) => {
+  try {
+    const raw = localStorage.getItem(roomsKey(userId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((r, i) => sanitizeRoom(r, i));
+      }
+    }
+  } catch { /* Try migration from legacy */ }
+
+  // 마이그레이션: 기존 단일 방 데이터가 있는 경우 첫 번째 방으로 변환
+  const legacyFurn = loadLegacyFurniture(userId);
+  const legacyDoor = loadLegacyDoor();
+  const defaultRooms = [
+    {
+      id: 'room-1',
+      name: '내 방',
+      furniture: legacyFurn,
+      door: legacyDoor,
+      createdAt: new Date().toISOString(),
+    }
+  ];
+
+  try {
+    localStorage.setItem(roomsKey(userId), JSON.stringify(defaultRooms));
+  } catch { /* Ignore */ }
+
+  return defaultRooms;
+};
+
 export function useRoom(userId) {
-  const [furniture, setFurniture] = useState(() => loadRoom(userId));
+  const [rooms, setRooms] = useState(() => loadRooms(userId));
+  const [activeRoomId, setActiveRoomIdState] = useState(() => {
+    const savedId = localStorage.getItem(activeRoomKey(userId));
+    if (savedId && rooms.some(r => r.id === savedId)) return savedId;
+    return rooms[0]?.id || 'room-1';
+  });
   const [saveError, setSaveError] = useState('');
   const prevUserId = useRef(userId);
+  const cloudDebounceRef = useRef(null);
+  const isSyncingFromCloudRef = useRef(false);
 
-  // userId 변경 시 해당 사용자의 방 배치 로드
+  // userId 변경 시 해당 사용자의 방 목록 로드 및 클라우드 동기화
   useEffect(() => {
     if (prevUserId.current !== userId) {
       prevUserId.current = userId;
-      setFurniture(loadRoom(userId));
+      const loaded = loadRooms(userId);
+      setRooms(loaded);
+      const savedId = localStorage.getItem(activeRoomKey(userId));
+      if (savedId && loaded.some(r => r.id === savedId)) {
+        setActiveRoomIdState(savedId);
+      } else {
+        setActiveRoomIdState(loaded[0]?.id || 'room-1');
+      }
     }
+
+    if (!isFirebaseConfigured || !userId || userId === 'guest') {
+      return;
+    }
+
+    let isMounted = true;
+
+    // 1) 클라우드 방 데이터 확인 및 마이그레이션
+    loadRoomsFromCloud(userId).then((cloudData) => {
+      if (!isMounted) return;
+      if (cloudData && Array.isArray(cloudData.rooms) && cloudData.rooms.length > 0) {
+        isSyncingFromCloudRef.current = true;
+        setRooms(cloudData.rooms);
+        if (cloudData.activeRoomId) {
+          setActiveRoomIdState(cloudData.activeRoomId);
+        }
+        try {
+          localStorage.setItem(roomsKey(userId), JSON.stringify(cloudData.rooms));
+          if (cloudData.activeRoomId) {
+            localStorage.setItem(activeRoomKey(userId), cloudData.activeRoomId);
+          }
+        } catch {}
+        setTimeout(() => {
+          isSyncingFromCloudRef.current = false;
+        }, 300);
+      } else {
+        // 클라우드에 데이터가 없으면 현재 로컬 방 데이터를 클라우드에 최초 백업
+        const local = loadRooms(userId);
+        if (local.length > 0) {
+          saveRoomsToCloud(userId, local, local[0]?.id || 'room-1');
+        }
+      }
+    });
+
+    // 2) 실시간 클라우드 동기화 구독
+    const unsubscribe = subscribeRoomsCloud(userId, ({ rooms: cloudRooms, activeRoomId: cloudActiveId }) => {
+      if (!isMounted) return;
+      isSyncingFromCloudRef.current = true;
+      setRooms(cloudRooms);
+      if (cloudActiveId) {
+        setActiveRoomIdState(cloudActiveId);
+      }
+      try {
+        localStorage.setItem(roomsKey(userId), JSON.stringify(cloudRooms));
+        if (cloudActiveId) {
+          localStorage.setItem(activeRoomKey(userId), cloudActiveId);
+        }
+      } catch {}
+      setTimeout(() => {
+        isSyncingFromCloudRef.current = false;
+      }, 300);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [userId]);
 
+  // 활성 방이 유효한지 확인하고 없으면 첫 번째 방으로 보정
   useEffect(() => {
-    try { localStorage.setItem(roomKey(userId), JSON.stringify(furniture)); setSaveError(''); }
-    catch { setSaveError('방 배치를 저장하지 못했어요. 브라우저 저장 공간을 확인해주세요.'); }
-  }, [furniture, userId]);
+    if (!rooms.some(r => r.id === activeRoomId)) {
+      const fallbackId = rooms[0]?.id || 'room-1';
+      setActiveRoomIdState(fallbackId);
+      try { localStorage.setItem(activeRoomKey(userId), fallbackId); } catch {}
+    }
+  }, [rooms, activeRoomId, userId]);
+
+  // 활성 방 변경 시 localStorage에 저장
+  const setActiveRoomId = (id) => {
+    setActiveRoomIdState(id);
+    try { localStorage.setItem(activeRoomKey(userId), id); } catch {}
+  };
+
+  const activeRoom = rooms.find(r => r.id === activeRoomId) || rooms[0] || {
+    id: 'room-1',
+    name: '내 방',
+    furniture: [],
+    door: DEFAULT_DOOR,
+  };
+
+  const furniture = activeRoom.furniture;
+  const door = activeRoom.door || DEFAULT_DOOR;
+
+  // 방 목록 저장 (영구 로컬 동기화 + 하위 호환 미러링 + 클라우드 디바운스 백업)
+  useEffect(() => {
+    try {
+      localStorage.setItem(roomsKey(userId), JSON.stringify(rooms));
+      if (activeRoom && activeRoom.furniture) {
+        localStorage.setItem(legacyRoomKey(userId), JSON.stringify(activeRoom.furniture));
+      }
+      setSaveError('');
+    } catch {
+      setSaveError('방 배치를 저장하지 못했어요. 브라우저 저장 공간을 확인해주세요.');
+    }
+
+    if (!isSyncingFromCloudRef.current && isFirebaseConfigured && userId && userId !== 'guest') {
+      if (cloudDebounceRef.current) clearTimeout(cloudDebounceRef.current);
+      cloudDebounceRef.current = setTimeout(() => {
+        saveRoomsToCloud(userId, rooms, activeRoomId);
+      }, 600);
+    }
+    return () => {
+      if (cloudDebounceRef.current) clearTimeout(cloudDebounceRef.current);
+    };
+  }, [rooms, activeRoom, activeRoomId, userId]);
+
+  // 현재 활성 방의 가구 업데이트
+  const setFurniture = (updater) => {
+    setRooms(prevRooms => {
+      return prevRooms.map(r => {
+        if (r.id === activeRoomId) {
+          const nextFurniture = typeof updater === 'function' ? updater(r.furniture) : updater;
+          return { ...r, furniture: nextFurniture };
+        }
+        return r;
+      });
+    });
+  };
+
+  // 현재 활성 방의 방문 설정 업데이트
+  const setDoor = (updater) => {
+    setRooms(prevRooms => {
+      return prevRooms.map(r => {
+        if (r.id === activeRoomId) {
+          const nextDoor = typeof updater === 'function' ? updater(r.door || DEFAULT_DOOR) : updater;
+          return { ...r, door: nextDoor };
+        }
+        return r;
+      });
+    });
+  };
+
+  // 새 방 추가
+  const addRoom = (name, starterTemplate = 'starter') => {
+    const trimmedName = (name || '').trim();
+    let finalName = trimmedName;
+    if (!finalName) {
+      let counter = 1;
+      while (rooms.some(r => r.name === `새 방 ${counter}`)) counter++;
+      finalName = `새 방 ${counter}`;
+    }
+
+    const newId = `room-${Date.now()}`;
+    let starterFurniture = [];
+    if (starterTemplate === 'starter') {
+      starterFurniture = separateFurniture([
+        { id: `drawers-${Date.now()}`, type: 'drawers', name: '서랍장', x: 6, y: .5, rotated: false },
+        { id: `shelf-${Date.now()}`, type: 'shelf', name: '책장', x: .5, y: .5, rotated: false },
+        { id: `organizer-${Date.now()}`, type: 'organizer', name: '정리함', x: 4.1, y: 7.8, rotated: false },
+      ]);
+    }
+
+    const newRoom = {
+      id: newId,
+      name: finalName,
+      furniture: starterFurniture,
+      door: DEFAULT_DOOR,
+      createdAt: new Date().toISOString(),
+    };
+
+    setRooms(prev => [...prev, newRoom]);
+    setActiveRoomId(newId);
+    return newRoom;
+  };
+
+  // 방 이름 변경
+  const renameRoom = (roomId, newName) => {
+    const trimmed = (newName || '').trim();
+    if (!trimmed) return;
+    setRooms(prev => prev.map(r => r.id === roomId ? { ...r, name: trimmed } : r));
+  };
+
+  // 방 삭제 (최소 1개의 방은 항상 보존)
+  const deleteRoom = (roomId) => {
+    if (rooms.length <= 1) return false;
+    setRooms(prev => {
+      const remaining = prev.filter(r => r.id !== roomId);
+      if (activeRoomId === roomId) {
+        const nextActive = remaining[0]?.id || 'room-1';
+        setActiveRoomId(nextActive);
+      }
+      return remaining;
+    });
+    return true;
+  };
+
+  // 특정 방의 가구 직접 업데이트 (예: 스캔 등록 시 지정한 방에 가구 추가 등)
+  const updateRoomFurniture = (roomId, updater) => {
+    setRooms(prevRooms => {
+      return prevRooms.map(r => {
+        if (r.id === roomId) {
+          const nextFurniture = typeof updater === 'function' ? updater(r.furniture) : updater;
+          return { ...r, furniture: nextFurniture };
+        }
+        return r;
+      });
+    });
+  };
+
+  // 특정 방의 위치 목록 반환
+  const getRoomLocations = (roomId) => {
+    const target = rooms.find(r => r.id === roomId);
+    if (!target) return [FLOOR_LOCATION];
+    return [
+      FLOOR_LOCATION,
+      ...target.furniture.flatMap(f => {
+        const count = slotCount(f);
+        const slots = Array.from({ length: count }, (_, i) => slotName(f, i));
+        return [f.name, ...slots];
+      })
+    ];
+  };
+
   return {
+    rooms,
+    setRooms,
+    activeRoomId,
+    setActiveRoomId,
+    activeRoom,
     furniture,
     setFurniture,
+    door,
+    setDoor,
+    addRoom,
+    renameRoom,
+    deleteRoom,
+    updateRoomFurniture,
+    getRoomLocations,
     saveError,
     locations: [
       FLOOR_LOCATION,
