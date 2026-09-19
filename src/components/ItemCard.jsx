@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import ItemEditModal from './ItemEditModal';
+import Icon from './Icon';
+import { USAGE_CONFIG } from '../hooks/useItems';
 
 const sizeLabels = {
-  tiny: '아주 작음 (손가락)',
-  small: '작음 (손바닥)',
-  medium: '보통 (팔뚝)',
-  large: '큼 (그 이상)',
+  tiny: '아주 작음',
+  small: '작음',
+  medium: '보통',
+  large: '큼',
 };
 
 const categoryEmojis = {
@@ -22,15 +24,17 @@ const categoryEmojis = {
 };
 
 const statusColors = {
-  active: 'bg-green-100 text-green-800 border-green-200',
-  archived: 'bg-amber-100 text-amber-800 border-amber-200',
-  discarded: 'bg-rose-100 text-rose-800 border-rose-200',
+  active: 'bg-[#FFF0E5] text-[#A96845]',
+  archived: 'bg-[#FFF5D9] text-[#9A6D25]',
+  discarded: 'bg-[#FFE9E7] text-[#B55B59]',
+  trading: 'bg-[#FFF0D8] text-[#A66E22]',
 };
 
 const statusLabels = {
   active: '보관 중',
   archived: '보관함 이동',
   discarded: '폐기 예정',
+  trading: '거래 · 나눔 예정',
 };
 
 export default function ItemCard({
@@ -40,9 +44,18 @@ export default function ItemCard({
   onDirectEdit,
   otherItems = [],
   onBatchRecalibrate,
+  roomFurniture = [],
+  viewMode = 'list',
+  isDeclutterMode = false,
+  isEditMode = false,
+  isSelected = false,
+  onToggleSelect,
+  onAddSlot,
 }) {
   const [isEditing, setIsEditing] = useState(false);
+  const [imgError, setImgError] = useState(false);
   const emoji = categoryEmojis[item.category] || '📦';
+  const isSelectMode = isDeclutterMode || isEditMode;
 
   const handleSaveEdit = (updatedItem) => {
     if (onDirectEdit) {
@@ -52,109 +65,314 @@ export default function ItemCard({
     }
   };
 
-  return (
-    <>
-      <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-gray-200/80 hover:shadow-md transition-all">
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex items-start gap-4 flex-1">
-            <span className="text-3xl sm:text-4xl p-2 bg-slate-50 rounded-2xl border border-slate-100 shrink-0">
-              {emoji}
-            </span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-base sm:text-lg font-bold text-gray-900 break-words">
-                  {item.name}
-                </h3>
-                <span className="text-xs sm:text-sm font-semibold text-indigo-600 bg-indigo-50 px-2.5 py-0.5 rounded-full border border-indigo-100">
-                  {item.category}
-                </span>
+  const handleUsageChange = (newUsage) => {
+    if (onDirectEdit) {
+      onDirectEdit({ ...item, usage: newUsage });
+    } else if (onUpdate && item.id) {
+      onUpdate(item.id, { usage: newUsage });
+    }
+  };
+
+  const handleCardClick = () => {
+    if (isSelectMode) {
+      if (onToggleSelect) onToggleSelect(item.id);
+    } else {
+      setIsEditing(true);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // 1. BLOCK VIEW (블록형: 널널하고 여유로운 카드 갤러리)
+  // -------------------------------------------------------------
+  if (viewMode === 'block') {
+    return (
+      <>
+        <div
+          onClick={handleCardClick}
+          className={`fluffy-card p-4 sm:p-5 transition-all hover:-translate-y-1 hover:shadow-[0_16px_36px_rgba(74,62,61,0.12)] flex flex-col justify-between h-full min-h-[350px] bg-white relative border group cursor-pointer ${
+            isSelected
+              ? 'ring-2 ring-[#B56562] bg-[#FFF9F7] border-[#FFB7B2] shadow-sm'
+              : 'border-[#F6EFEA]'
+          }`}
+        >
+          {/* 선택 모드 체크박스 */}
+          {isSelectMode && (
+            <div className="absolute top-3 left-3 z-20">
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all shadow-sm ${
+                  isSelected
+                    ? 'bg-[#B56562] text-white scale-110'
+                    : 'border-2 border-[#D9CBC5] bg-white/95 text-transparent'
+                }`}
+              >
+                ✓
               </div>
-              {item.description && (
-                <p className="text-sm text-gray-600 mt-1 line-clamp-2 leading-relaxed">
-                  {item.description}
-                </p>
+            </div>
+          )}
+
+          <div className="flex flex-col flex-1">
+            {/* 썸네일 / 이모지 영역: 넉넉한 높이(h-36 sm:h-40)와 고정 규격 */}
+            <div className="w-full h-36 sm:h-40 rounded-2xl bg-gradient-to-b from-[#FFF8F5] to-[#FFF1EB] border border-[#F2ECE6] relative overflow-hidden flex items-center justify-center mb-3 shrink-0">
+              {!imgError && item.imageUrl ? (
+                <img
+                  src={item.imageUrl}
+                  alt={item.name}
+                  className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                  onError={() => setImgError(true)}
+                />
+              ) : (
+                <span className="text-5xl sm:text-6xl drop-shadow-xs transition-transform group-hover:scale-110 select-none">
+                  {emoji}
+                </span>
               )}
-              <div className="flex flex-wrap items-center gap-2 mt-3">
-                <span className="text-xs sm:text-sm font-medium px-3 py-1 rounded-full bg-slate-100 text-slate-700">
-                  📍 {item.location || '미분류'}
+
+              {/* 카테고리 뱃지 (상단 좌측 오버레이) */}
+              <span
+                className={`absolute text-xs font-bold text-[#B56562] bg-white/95 backdrop-blur-xs px-2.5 py-1 rounded-full shadow-xs border border-[#FFDCD6] ${
+                  isSelectMode ? 'top-3 left-11' : 'top-3 left-3'
+                }`}
+              >
+                {item.category}
+              </span>
+
+              {/* 수정 버튼 (상단 우측 오버레이) */}
+              {!isSelectMode && (onDirectEdit || onUpdate) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsEditing(true);
+                  }}
+                  title="수정하기"
+                  className="absolute top-3 right-3 p-1.5 rounded-full bg-white/95 text-[#9A8784] hover:text-[#B56562] shadow-xs hover:bg-white transition-all"
+                >
+                  <Icon name="pencil" size={15} />
+                </button>
+              )}
+            </div>
+
+            {/* 물건 이름: 2줄 규격 높이(min-h-[2.85rem]) 고정으로 줄바꿈 상관없이 완벽 수평 일치 */}
+            <div className="min-h-[2.85rem] flex items-center">
+              <h3
+                className="text-sm sm:text-base font-bold text-[#4A3E3D] break-words line-clamp-2 leading-snug"
+                title={item.name}
+              >
+                {item.name}
+              </h3>
+            </div>
+
+            {/* 위치 & 크기 칩: 고정 높이와 정돈된 여백 */}
+            <div className="flex flex-wrap items-center gap-1.5 mt-2.5 min-h-[1.75rem]">
+              <span
+                className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE] truncate max-w-full flex items-center gap-1"
+                title={item.location || '미분류'}
+              >
+                <Icon name="pin" size={11} className="shrink-0 text-[#B56562]" />
+                <span className="truncate">{item.location || '미분류'}</span>
+              </span>
+              <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE]">
+                📏 {sizeLabels[item.size] || item.size}
+              </span>
+              {item.status && item.status !== 'active' && (
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    statusColors[item.status] || 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {statusLabels[item.status] || item.status}
                 </span>
-                <span className="text-xs sm:text-sm font-medium px-3 py-1 rounded-full bg-slate-100 text-slate-700">
-                  📏 {sizeLabels[item.size] || item.size}
-                </span>
-                {item.status && (
-                  <span
-                    className={`text-xs sm:text-sm font-bold px-3 py-1 rounded-full border ${
-                      statusColors[item.status] || 'bg-gray-100 text-gray-600'
-                    }`}
-                  >
-                    {statusLabels[item.status] || item.status}
-                  </span>
-                )}
-              </div>
+              )}
             </div>
           </div>
 
-          {/* 수정 버튼 */}
-          {(onDirectEdit || onUpdate) && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setIsEditing(true);
-              }}
-              title="수정하기"
-              className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all shrink-0"
-            >
-              <span className="text-base">✏️</span>
-            </button>
-          )}
+          {/* 하단 사용도 선택기: mt-auto로 모든 카드의 바닥 선이 완벽하게 일치 */}
+          <div className="mt-auto pt-3 border-t border-[#F5EFEA] flex items-center justify-between gap-1">
+            <span className="text-xs font-bold text-[#8A7977]">사용도</span>
+            <div className="inline-flex rounded-full bg-[#FAF8F5] p-0.5 border border-[#EDE5DE] gap-1">
+              {Object.values(USAGE_CONFIG).map((cfg) => {
+                const isUsageSelected = (item.usage || 'frequent') === cfg.id;
+                return (
+                  <button
+                    key={cfg.id}
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleUsageChange(cfg.id);
+                    }}
+                    className={`w-7 h-7 rounded-full text-xs font-bold transition-all flex items-center justify-center ${
+                      isUsageSelected
+                        ? `${cfg.badgeClass} border shadow-xs scale-105`
+                        : 'text-[#9C8B88] hover:text-[#4A3E3D] hover:bg-[#FFF0EE]'
+                    }`}
+                    title={cfg.label}
+                  >
+                    <span>{cfg.emoji}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
-        {/* 하단 액션 버튼 영역 */}
-        {onUpdate && item.id && (
-          <div className="flex items-center gap-2 mt-4 pt-3.5 border-t border-gray-100 flex-wrap">
-            {item.status === 'active' && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => onUpdate(item.id, { status: 'archived' })}
-                  className="text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-xl bg-amber-50 text-amber-800 hover:bg-amber-100 transition-colors border border-amber-200"
-                >
-                  📦 보관함으로
-                </button>
-                <button
-                  type="button"
-                  onClick={() => onUpdate(item.id, { status: 'discarded' })}
-                  className="text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-xl bg-rose-50 text-rose-800 hover:bg-rose-100 transition-colors border border-rose-200"
-                >
-                  🗑️ 폐기
-                </button>
-              </>
-            )}
-            {item.status !== 'active' && (
-              <button
-                type="button"
-                onClick={() => onUpdate(item.id, { status: 'active' })}
-                className="text-xs sm:text-sm font-semibold px-3.5 py-2 rounded-xl bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors border border-emerald-200"
+        {isEditing && (
+          <ItemEditModal
+            item={item}
+            onSave={handleSaveEdit}
+            onClose={() => setIsEditing(false)}
+            otherItems={otherItems}
+            onBatchRecalibrate={onBatchRecalibrate}
+            roomFurniture={roomFurniture}
+            onAddSlot={onAddSlot}
+          />
+        )}
+      </>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // 2. LIST VIEW (목록형: 완벽한 규격 정렬과 시원한 여백)
+  // -------------------------------------------------------------
+  return (
+    <>
+      <div
+        onClick={handleCardClick}
+        className={`fluffy-card p-4 sm:p-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(74,62,61,0.1)] cursor-pointer border flex flex-col justify-between h-full min-h-[190px] ${
+          isSelected
+            ? 'ring-2 ring-[#B56562] bg-[#FFF9F7] border-[#FFB7B2]'
+            : 'border-[#F6EFEA]'
+        }`}
+      >
+        <div className="flex items-start gap-4 flex-1">
+          {/* 선택 모드 체크박스 */}
+          {isSelectMode && (
+            <div className="shrink-0 flex items-center pt-2 self-start">
+              <div
+                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all shadow-xs ${
+                  isSelected
+                    ? 'bg-[#B56562] text-white scale-110'
+                    : 'border-2 border-[#D9CBC5] bg-white text-transparent'
+                }`}
               >
-                ↩️ 다시 보관 중으로
-              </button>
-            )}
-            {onRemove && (
-              <button
-                type="button"
-                onClick={() => {
-                  if (confirm(`'${item.name}' 물건을 목록에서 삭제하시겠습니까?`)) {
-                    onRemove(item.id);
-                  }
-                }}
-                className="text-xs sm:text-sm font-medium px-3 py-2 rounded-xl text-gray-400 hover:text-rose-600 hover:bg-rose-50 transition-colors ml-auto"
-              >
-                삭제
-              </button>
+                ✓
+              </div>
+            </div>
+          )}
+
+          {/* 좌측 썸네일 / 이모지: w-20 h-20 고정 규격 */}
+          <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-b from-[#FFF8F5] to-[#FFF1EB] border border-[#F2ECE6] shrink-0 shadow-xs flex items-center justify-center relative">
+            {!imgError && item.imageUrl ? (
+              <img
+                src={item.imageUrl}
+                alt={item.name}
+                className="w-full h-full object-cover"
+                onError={() => setImgError(true)}
+              />
+            ) : (
+              <span className="text-4xl select-none">{emoji}</span>
             )}
           </div>
-        )}
+
+          {/* 우측 컨텐츠 영역: 상단 카테고리/액션 -> 타이틀 -> 칩 규격 통일 */}
+          <div className="flex-1 min-w-0 flex flex-col justify-between">
+            {/* 상단 1열: 카테고리 뱃지와 우측 관리 액션 (항상 동일한 위치) */}
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <span className="text-xs font-bold text-[#B56562] bg-[#FFF0EE] px-2.5 py-0.5 rounded-full border border-[#FFDCD6]">
+                {item.category}
+              </span>
+
+              {!isSelectMode && (
+                <div className="flex items-center gap-1 shrink-0">
+                  {(onDirectEdit || onUpdate) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsEditing(true);
+                      }}
+                      title="수정하기"
+                      className="fluffy-button p-1.5 text-[#B9A8A5] hover:text-[#B56562] hover:bg-[#FFF0EE] rounded-xl transition-colors"
+                    >
+                      <Icon name="pencil" size={15} />
+                    </button>
+                  )}
+                  {onRemove && item.id && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (confirm(`'${item.name}' 물건을 목록에서 삭제하시겠습니까?`)) {
+                          onRemove(item.id);
+                        }
+                      }}
+                      title="삭제하기"
+                      className="fluffy-button p-1.5 text-[#B9A8A5] hover:text-[#B55B59] hover:bg-[#FFF0EE] rounded-xl transition-colors"
+                    >
+                      <Icon name="trash" size={15} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 타이틀: min-h-[2.85rem] 규격 높이 고정으로 1줄/2줄 카드 높이 차이 제거 */}
+            <div className="min-h-[2.85rem] flex items-center">
+              <h3
+                className="text-base sm:text-lg font-bold text-[#4A3E3D] break-words line-clamp-2 leading-snug"
+                title={item.name}
+              >
+                {item.name}
+              </h3>
+            </div>
+
+            {/* 위치 & 크기 칩 */}
+            <div className="flex flex-wrap items-center gap-2 mt-2">
+              <span className="text-xs font-medium px-3 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE] truncate max-w-full flex items-center gap-1">
+                <Icon name="pin" size={12} className="inline mr-0.5 text-[#B56562]" />
+                <span className="truncate">{item.location || '미분류'}</span>
+              </span>
+              <span className="text-xs font-medium px-3 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE]">
+                📏 {sizeLabels[item.size] || item.size}
+              </span>
+              {item.status && item.status !== 'active' && (
+                <span
+                  className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
+                    statusColors[item.status] || 'bg-gray-100 text-gray-600'
+                  }`}
+                >
+                  {statusLabels[item.status] || item.status}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 하단 사용도 선택기: mt-auto pt-3으로 모든 카드의 가로선 완벽 일치 */}
+        <div className="mt-auto pt-3 border-t border-[#F5EFEA] flex items-center justify-between">
+          <span className="text-xs font-bold text-[#8A7977] shrink-0">사용도:</span>
+          <div className="inline-flex rounded-full bg-[#FAF8F5] p-0.5 border border-[#EDE5DE] gap-1">
+            {Object.values(USAGE_CONFIG).map((cfg) => {
+              const isUsageSelected = (item.usage || 'frequent') === cfg.id;
+              return (
+                <button
+                  key={cfg.id}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleUsageChange(cfg.id);
+                  }}
+                  className={`w-7 h-7 rounded-full text-xs font-bold transition-all flex items-center justify-center ${
+                    isUsageSelected
+                      ? `${cfg.badgeClass} border shadow-xs scale-105`
+                      : 'text-[#9C8B88] hover:text-[#4A3E3D] hover:bg-[#FFF0EE]'
+                  }`}
+                  title={cfg.label}
+                >
+                  <span>{cfg.emoji}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {isEditing && (
@@ -164,6 +382,8 @@ export default function ItemCard({
           onClose={() => setIsEditing(false)}
           otherItems={otherItems}
           onBatchRecalibrate={onBatchRecalibrate}
+          roomFurniture={roomFurniture}
+          onAddSlot={onAddSlot}
         />
       )}
     </>

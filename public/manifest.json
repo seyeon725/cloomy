@@ -1,6 +1,6 @@
 {
-  "name": "정리짱 - AI 물건 정리 도우미",
-  "short_name": "정리짱",
+  "name": "CLOOMY — Clear space, feel roomy",
+  "short_name": "CLOOMY",
   "description": "사진으로 물건을 스캔하고 AI가 정리를 도와줘요",
   "start_url": "/",
   "display": "standalone",

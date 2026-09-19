@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useCamera } from '../hooks/useCamera';
+import { FlaticonGallery, FlaticonCamera, FlaticonShutter } from './Icon';
 
 export default function Camera({ onCapture }) {
   const { videoRef, photo, error, isActive, startCamera, stopCamera, capturePhoto, clearPhoto } =
@@ -9,7 +10,7 @@ export default function Camera({ onCapture }) {
   useEffect(() => {
     startCamera();
     return () => stopCamera();
-  }, []);
+  }, [startCamera, stopCamera]);
 
   const handleCapture = useCallback(() => {
     const result = capturePhoto();
@@ -35,27 +36,38 @@ export default function Camera({ onCapture }) {
       if (!file) return;
       const reader = new FileReader();
       reader.onloadend = () => {
-        const dataUrl = reader.result;
-        const base64 = dataUrl.split(',')[1];
-        onCapture({ base64, mimeType: file.type, dataUrl });
+        const image = new Image();
+        image.onload = () => {
+          // 휴대폰 원본은 지나치게 커서 전송 중 실패할 수 있어, 인식에 충분한 크기로 정리합니다.
+          const maxSide = 2048;
+          const scale = Math.min(1, maxSide / Math.max(image.width, image.height));
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(image.width * scale);
+          canvas.height = Math.round(image.height * scale);
+          canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.9);
+          onCapture({ base64: dataUrl.split(',')[1], mimeType: 'image/jpeg', dataUrl });
+        };
+        image.src = reader.result;
       };
       reader.readAsDataURL(file);
+      e.target.value = '';
     },
     [onCapture]
   );
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center gap-6 p-8 bg-white rounded-3xl border border-gray-200 shadow-sm text-center my-4">
-        <div className="text-7xl">📸</div>
+      <div className="flex flex-col items-center justify-center gap-6 p-8 fluffy-card text-center my-4">
+        <div className="p-4 bg-[#FFF0EE] rounded-3xl shadow-xs"><FlaticonCamera size={54} /></div>
         <div className="space-y-2 max-w-sm">
-          <p className="text-base font-bold text-gray-800">{error}</p>
-          <p className="text-sm text-gray-500">
+          <p className="text-base font-bold text-[#4A3E3D]">{error}</p>
+          <p className="text-sm text-[#806F6D]">
             카메라 권한이 없거나 웹캠을 사용할 수 없습니다. 대신 갤러리나 파일에서 사진을 올려보세요!
           </p>
         </div>
-        <label className="cursor-pointer bg-indigo-600 text-white px-8 py-4 rounded-2xl font-extrabold text-base hover:bg-indigo-700 transition-all shadow-lg active:scale-95 flex items-center gap-3">
-          <span className="text-2xl">🖼️</span>
+        <label className="fluffy-button cursor-pointer bg-[#FFB7B2] text-[#4A3E3D] px-8 py-4 font-extrabold text-base shadow-[0_10px_24px_rgba(255,183,178,0.4)] flex items-center gap-3">
+          <FlaticonGallery size={28} />
           <span>갤러리에서 사진 불러오기</span>
           <input
             type="file"
@@ -64,32 +76,39 @@ export default function Camera({ onCapture }) {
             onChange={handleFileUpload}
           />
         </label>
+        <button
+          type="button"
+          onClick={startCamera}
+          className="fluffy-button bg-white text-[#806F6D] px-6 py-3 font-bold text-sm shadow-[0_8px_20px_rgba(74,62,61,0.08)]"
+        >
+          ↻ 카메라 다시 시도
+        </button>
       </div>
     );
   }
 
   if (photo) {
     return (
-      <div className="flex flex-col items-center gap-6 w-full max-w-xl mx-auto">
-        <div className="relative w-full rounded-3xl overflow-hidden shadow-xl border-4 border-white bg-slate-900 aspect-[4/3] max-h-[500px]">
+      <div className="flex flex-col items-center gap-2.5 w-full max-w-md sm:max-w-lg md:max-w-[560px] mx-auto">
+        <div className="relative w-full rounded-[22px] sm:rounded-[26px] overflow-hidden shadow-[0_12px_28px_rgba(74,62,61,0.1)] bg-[#4A3E3D] aspect-[4/3] max-h-[420px] flex items-center justify-center">
           <img
             src={photo.dataUrl}
             alt="촬영된 사진"
             className="w-full h-full object-contain"
           />
         </div>
-        <div className="flex gap-4 w-full">
+        <div className="flex gap-2.5 w-full shrink-0">
           <button
             type="button"
             onClick={handleRetake}
-            className="flex-1 py-4 px-5 rounded-2xl border-2 border-gray-300 text-gray-800 font-bold text-base sm:text-lg hover:bg-gray-100 transition-colors"
+            className="fluffy-button flex-1 py-2.5 px-3.5 bg-white text-[#806F6D] font-bold text-xs sm:text-sm shadow-[0_6px_16px_rgba(74,62,61,0.06)]"
           >
             🔄 다시 찍기
           </button>
           <button
             type="button"
             onClick={handleUsePhoto}
-            className="flex-1 py-4 px-5 rounded-2xl bg-indigo-600 text-white font-extrabold text-base sm:text-lg hover:bg-indigo-700 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+            className="fluffy-button flex-1 py-2.5 px-3.5 bg-[#FFB7B2] text-[#4A3E3D] font-extrabold text-xs sm:text-sm shadow-[0_8px_20px_rgba(255,183,178,0.4)] flex items-center justify-center gap-1.5"
           >
             <span>✨ AI로 물건 분석</span>
           </button>
@@ -99,9 +118,9 @@ export default function Camera({ onCapture }) {
   }
 
   return (
-    <div className="flex flex-col items-center gap-6 w-full max-w-xl mx-auto">
-      {/* 카메라 라이브 뷰 (크고 시원하게) */}
-      <div className="relative w-full rounded-3xl overflow-hidden shadow-2xl bg-black border-4 border-white aspect-[4/3] max-h-[500px] flex items-center justify-center">
+    <div className="flex flex-col items-center gap-2.5 w-full max-w-md sm:max-w-lg md:max-w-[560px] mx-auto">
+      {/* 카메라 라이브 뷰 (살짝 줄인 단정하고 예쁜 4:3 비율) */}
+      <div className="relative w-full rounded-[22px] sm:rounded-[26px] overflow-hidden shadow-[0_12px_28px_rgba(74,62,61,0.1)] bg-black aspect-[4/3] max-h-[420px] flex items-center justify-center">
         <video
           ref={videoRef}
           autoPlay
@@ -110,18 +129,18 @@ export default function Camera({ onCapture }) {
           className="w-full h-full object-cover"
         />
         {/* 가이드라인 십자선 오버레이 */}
-        <div className="absolute inset-8 border border-white/30 rounded-2xl pointer-events-none flex items-center justify-center">
-          <span className="text-white/60 text-xs font-semibold px-3 py-1 bg-black/40 backdrop-blur rounded-full">
+        <div className="absolute inset-3 sm:inset-5 border border-white/30 rounded-2xl pointer-events-none flex items-center justify-center">
+          <span className="text-white/80 text-[11px] sm:text-xs font-semibold px-2.5 py-1 bg-black/45 backdrop-blur-md rounded-full shadow-sm">
             정리할 구역을 화면 안에 비춰주세요
           </span>
         </div>
       </div>
 
       {/* 셔터 및 갤러리 컨트롤러 바 */}
-      <div className="w-full flex items-center justify-between px-6 py-4 bg-white rounded-3xl shadow-md border border-gray-200">
+      <div className="w-full flex items-center justify-between px-4 sm:px-6 py-2.5 bg-white rounded-[22px] sm:rounded-[26px] shadow-[0_8px_24px_rgba(74,62,61,0.06)] border border-[#F4EEEA] shrink-0">
         {/* 갤러리 업로드 버튼 */}
-        <label className="cursor-pointer flex items-center gap-2 px-4 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 transition-colors text-slate-800 font-bold text-sm sm:text-base shrink-0">
-          <span className="text-2xl">🖼️</span>
+        <label className="fluffy-button cursor-pointer flex items-center gap-1.5 px-3 sm:px-3.5 py-2 bg-[#FFF0E5] hover:bg-[#FFE5D6] text-[#80604F] font-extrabold text-xs shrink-0 transition-all shadow-xs">
+          <FlaticonGallery size={18} />
           <span>사진 업로드</span>
           <input
             ref={fileInputRef}
@@ -132,26 +151,24 @@ export default function Camera({ onCapture }) {
           />
         </label>
 
-        {/* 대형 셔터 버튼 */}
+        {/* 셔터 버튼 */}
         <div className="flex flex-col items-center">
           <button
             type="button"
             onClick={handleCapture}
             disabled={!isActive}
             title="사진 촬영"
-            className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-indigo-600 border-4 border-white shadow-2xl hover:bg-indigo-700 active:scale-90 transition-all disabled:opacity-50 flex items-center justify-center ring-4 ring-indigo-300"
+            className="fluffy-button w-14 h-14 sm:w-16 sm:h-16 bg-gradient-to-tr from-[#FF9E99] to-[#FFB7B2] shadow-[0_6px_18px_rgba(255,183,178,0.5)] disabled:opacity-50 flex items-center justify-center ring-4 ring-[#FFF0E5] group transition-all"
           >
-            <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full border-2 border-white/60 flex items-center justify-center">
-              <span className="text-2xl">📸</span>
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-full border-2 border-white/80 flex items-center justify-center transition-transform group-hover:scale-105 group-active:scale-95">
+              <FlaticonShutter size={22} />
             </div>
           </button>
-          <span className="text-xs font-bold text-gray-500 mt-1.5">촬영</span>
+          <span className="text-[10px] font-black text-[#806F6D] mt-0.5 tracking-tight">촬영</span>
         </div>
 
-        {/* 빈 공간 균형용 (or 빠른 가이드) */}
-        <div className="w-[120px] text-right hidden sm:block">
-          <span className="text-xs text-gray-400 font-medium">여러 물건도<br />한 번에 인식해요</span>
-        </div>
+        {/* 우측 균형용 공간 */}
+        <div className="w-[74px] sm:w-[84px] hidden xs:block" aria-hidden="true" />
       </div>
     </div>
   );
