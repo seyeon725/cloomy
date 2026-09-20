@@ -65,7 +65,7 @@ export default function App() {
         console.warn('localStorage 저장 경고:', err);
       }
 
-      alert(`물건 ${PRELOADED_RECOVERY_DATA.items.length}개와 방 2개('내 방', '안방')가 즉시 복원되었습니다! 🎉`);
+      alert(`물건 ${PRELOADED_RECOVERY_DATA.items.length}개와 방 2개('내 방', '거실') 및 12개 가구 배치가 즉시 복원되었습니다! 🎉`);
     } catch (e) {
       console.error('Quick restore error:', e);
       alert(`복원 중 오류가 발생했습니다: ${e?.message || e}`);
@@ -364,12 +364,12 @@ export default function App() {
       </header>
 
       {/* 데이터 복구 알림 배너 */}
-      {itemsHook.items.length <= 11 && (
+      {(itemsHook.items.length <= 11 || room.rooms.some(r => r.name === '안방') || (room.rooms[0]?.furniture?.length || 0) < 12) && (
         <div className="bg-[#FFF8F0] border-b border-[#FFE8D6] px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#8A5D4D]">
           <div className="flex items-center gap-2">
             <span className="text-base">💡</span>
             <span>
-              이전 물건(42개)이 보이지 않으시나요? 로컬 백업에서 <strong>전체 {PRELOADED_RECOVERY_DATA.items.length}개 물건 및 방</strong>을 즉시 복구할 수 있어요.
+              이전 물건이나 가구 배치가 보이지 않으시나요? 로컬 백업에서 <strong>전체 {PRELOADED_RECOVERY_DATA.items.length}개 물건 및 방 2개('내 방', '거실')</strong>를 즉시 복구할 수 있어요.
             </span>
           </div>
           <div className="flex items-center gap-2 shrink-0">
@@ -378,7 +378,7 @@ export default function App() {
               onClick={handleQuickRestore}
               className="px-3 py-1.5 rounded-xl bg-[#B56562] text-white font-extrabold text-xs hover:bg-[#9E4E4B] transition-all cursor-pointer shadow-xs whitespace-nowrap"
             >
-              ✨ 전체 물건 즉시 복구
+              ✨ 전체 데이터 즉시 복구
             </button>
             <button
               type="button"

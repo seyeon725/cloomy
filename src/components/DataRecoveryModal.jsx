@@ -76,7 +76,7 @@ export default function DataRecoveryModal({ isOpen, onClose, itemsHook, room, us
         });
       }
 
-      setMessage(`전체 물건 ${PRELOADED_RECOVERY_DATA.items.length}개와 방 2개('내 방', '안방')가 완벽히 복원되었습니다! 🎉`);
+      setMessage(`전체 물건 ${PRELOADED_RECOVERY_DATA.items.length}개와 방 2개('내 방' 12개 가구 완비, '거실')가 완벽히 복원되었습니다! 🎉`);
     } catch (e) {
       console.error('복원 에러 상세:', e);
       setMessage(`복원 중 오류가 발생했습니다: ${e?.message || e}`);
@@ -194,10 +194,10 @@ service cloud.firestore {
             <span className="text-xl">🌟</span>
             <div>
               <h4 className="text-sm font-extrabold text-[#B56562]">
-                발견된 42개 물건 & 방 전체 복원
+                발견된 전체 물건 & 가구 배치 완벽 복원
               </h4>
               <p className="text-xs text-[#705E5B] mt-0.5 leading-relaxed">
-                로컬 작업 중 등록하셨던 <strong>42개 물건</strong>(신발장, 서브 책장, 책상 서랍 등)과 <strong>방 2개('내 방', '안방')</strong> 데이터를 안전하게 확보했습니다.
+                로컬 작업 중 등록하셨던 <strong>전체 물건({PRELOADED_RECOVERY_DATA.items.length}개)</strong>과 <strong>방 2개('내 방' 12개 가구 배치, '거실')</strong> 데이터를 안전하게 확보했습니다.
               </p>
             </div>
           </div>
@@ -207,7 +207,7 @@ service cloud.firestore {
             className="w-full mt-2 py-3 rounded-xl bg-[#B56562] hover:bg-[#9E4E4B] text-white font-black text-sm transition-all cursor-pointer shadow-md active:scale-98 flex items-center justify-center gap-2"
           >
             <span>✨</span>
-            <span>전체 데이터({PRELOADED_RECOVERY_DATA.items.length}개 물건 + 방 2개) 지금 복원하기</span>
+            <span>전체 데이터({PRELOADED_RECOVERY_DATA.items.length}개 물건 + '내 방' 12개 가구, '거실') 지금 복원하기</span>
           </button>
         </div>
 

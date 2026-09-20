@@ -119,16 +119,17 @@ const loadRooms = (userId) => {
         ? parsedUser
         : parsedGuest;
 
-    // 만약 방이 1개뿐이고 신발장/서브책장 등 커스텀 가구가 없는 초기 상태라면 백업 데이터 복원
-    const hasCustomFurniture =
-      Array.isArray(source) &&
-      source.some(r => (r.furniture || []).some(f => f.id === 'shelf-sub' || f.name === '서브 책장' || f.name === '신발장 옆 공간'));
+    // 만약 '안방'이 있거나, '거실'이 없거나, 12개 가구 배치가 아닌 구버전 데이터라면 최신 백업 데이터로 자동 마이그레이션
+    const hasAnbang = Array.isArray(source) && source.some(r => r.name === '안방');
+    const missingLivingRoom = Array.isArray(source) && !source.some(r => r.name === '거실');
+    const isOldFurnitureLayout = Array.isArray(source) && (source[0]?.furniture?.length || 0) < 12;
 
-    if ((!source || source.length <= 1 || !hasCustomFurniture) && PRELOADED_RECOVERY_DATA?.rooms?.length > 0) {
+    if ((!source || source.length <= 1 || hasAnbang || missingLivingRoom || isOldFurnitureLayout) && PRELOADED_RECOVERY_DATA?.rooms?.length > 0) {
       source = PRELOADED_RECOVERY_DATA.rooms;
       try {
         localStorage.setItem(roomsKey(userId), JSON.stringify(source));
         localStorage.setItem('cloomy_rooms', JSON.stringify(source));
+        localStorage.setItem(legacyRoomKey(userId), JSON.stringify(source[0]?.furniture || []));
       } catch {}
     }
 
@@ -162,7 +163,12 @@ export function useRoom(userId) {
   const [activeRoomId, setActiveRoomIdState] = useState(() => {
     const saved = localStorage.getItem(activeRoomKey(userId));
     if (saved && rooms.some(r => r.id === saved)) return saved;
-    return rooms[0]?.id || 'room-1';
+    const fallbackId = rooms[0]?.id || 'room-1';
+    try {
+      localStorage.setItem(activeRoomKey(userId), fallbackId);
+      localStorage.setItem('cloomy_active_room_id', fallbackId);
+    } catch {}
+    return fallbackId;
   });
   const [saveError, setSaveError] = useState('');
   const prevUserId = useRef(userId);

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getCloudData, saveCloudData, subscribeCloudData } from '../services/cloudSync';
 import { isFirebaseConfigured } from '../services/firebase';
+import { PRELOADED_RECOVERY_DATA } from '../data/recoveryBackup';
 
 export function useCloudSync({ user, itemsHook, room }) {
   const [syncStatus, setSyncStatus] = useState('idle'); // 'idle' | 'syncing' | 'synced' | 'error' | 'permission_denied'
@@ -72,15 +73,27 @@ export function useCloudSync({ user, itemsHook, room }) {
         };
 
         const cloudItems = cloudData && Array.isArray(cloudData.items) ? cloudData.items : [];
-        const mergedItems = mergeItemsSafely(currentLocalItems, cloudItems);
+        let mergedItems = mergeItemsSafely(currentLocalItems, cloudItems);
+        if (mergedItems.length < (PRELOADED_RECOVERY_DATA?.items?.length || 0)) {
+          mergedItems = mergeItemsSafely(mergedItems, PRELOADED_RECOVERY_DATA.items);
+        }
 
-        // 방 목록도 더 많은 방(거실 등)을 보유한 쪽 우선 선택
+        // 방 목록도 더 많은 방을 보유한 쪽 우선 선택
         const cloudRooms = cloudData && Array.isArray(cloudData.rooms) ? cloudData.rooms : [];
-        const mergedRooms =
+        let mergedRooms =
           currentLocalRooms.length >= cloudRooms.length ? currentLocalRooms : cloudRooms;
 
+        // 클라우드나 로컬에 '안방'이 있거나, '거실'이 없거나, 12개 가구 배치가 아닌 구버전 데이터라면 최신 12개 가구 및 '거실'로 교체
+        const hasAnbang = mergedRooms.some(r => r.name === '안방');
+        const missingLivingRoom = !mergedRooms.some(r => r.name === '거실');
+        const isOldLayout = (mergedRooms[0]?.furniture?.length || 0) < 12;
+
+        if ((hasAnbang || missingLivingRoom || isOldLayout || mergedRooms.length < 2) && PRELOADED_RECOVERY_DATA?.rooms?.length > 0) {
+          mergedRooms = PRELOADED_RECOVERY_DATA.rooms;
+        }
+
         console.log(
-          `[CloudSync] 로컬(${currentLocalItems.length}개) + 클라우드(${cloudItems.length}개) -> 통합 ${mergedItems.length}개 물건 확정`
+          `[CloudSync] 로컬(${currentLocalItems.length}개) + 클라우드(${cloudItems.length}개) -> 통합 ${mergedItems.length}개 물건, ${mergedRooms.length}개 방 확정`
         );
 
         isApplyingRemoteRef.current = true;
@@ -88,20 +101,30 @@ export function useCloudSync({ user, itemsHook, room }) {
         if (mergedRooms.length > 0) {
           room.setRooms(mergedRooms);
         }
-        if (cloudData?.activeRoomId) {
-          room.setActiveRoomId(cloudData.activeRoomId);
-        }
+        const targetActiveRoomId =
+          cloudData?.activeRoomId && mergedRooms.some(r => r.id === cloudData.activeRoomId)
+            ? cloudData.activeRoomId
+            : (mergedRooms[0]?.id || 'room-1');
+        room.setActiveRoomId(targetActiveRoomId);
+
         setTimeout(() => {
           isApplyingRemoteRef.current = false;
         }, 400);
 
-        // 통합된 물건 수가 클라우드보다 많으면 클라우드로 즉시 업로드 반영!
-        if (mergedItems.length > cloudItems.length || mergedRooms.length > cloudRooms.length) {
-          console.log(`[CloudSync] 통합된 최신 데이터(${mergedItems.length}개) 클라우드로 저장.`);
+        // 최신 마이그레이션이 발생했거나 클라우드보다 데이터가 많으면 클라우드로 즉시 업로드 반영!
+        const needsCloudUpdate =
+          mergedItems.length > cloudItems.length ||
+          mergedRooms.length > cloudRooms.length ||
+          hasAnbang ||
+          missingLivingRoom ||
+          isOldLayout;
+
+        if (needsCloudUpdate) {
+          console.log(`[CloudSync] 통합된 최신 데이터(${mergedItems.length}개 물건, ${mergedRooms.length}개 방) 클라우드로 저장.`);
           await saveCloudData(userId, {
             items: mergedItems,
             rooms: mergedRooms,
-            activeRoomId: currentActiveRoomId,
+            activeRoomId: targetActiveRoomId,
           });
           lastCloudTimestampRef.current = Date.now();
         } else {
@@ -144,10 +167,13 @@ export function useCloudSync({ user, itemsHook, room }) {
           itemsHook.setItems(remoteData.items);
         }
         if (Array.isArray(remoteData.rooms) && remoteData.rooms.length > 0) {
-          room.setRooms(remoteData.rooms);
-        }
-        if (remoteData.activeRoomId) {
-          room.setActiveRoomId(remoteData.activeRoomId);
+          const remoteHasAnbang = remoteData.rooms.some(r => r.name === '안방');
+          if (!remoteHasAnbang) {
+            room.setRooms(remoteData.rooms);
+            if (remoteData.activeRoomId && remoteData.rooms.some(r => r.id === remoteData.activeRoomId)) {
+              room.setActiveRoomId(remoteData.activeRoomId);
+            }
+          }
         }
         lastCloudTimestampRef.current = remoteData.deviceUpdatedAt || Date.now();
         setTimeout(() => {

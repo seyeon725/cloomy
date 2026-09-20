@@ -1,4 +1,4 @@
-// 자동 복구를 위해 크롬 로컬 저장소에서 완벽 추출한 백업 데이터
+// 자동 복구를 위해 크롬 로컬 저장소에서 완벽 추출한 최신 백업 데이터 (내 방 12개 가구 배치 + 거실)
 export const PRELOADED_RECOVERY_DATA = {
   "items": [
     {
@@ -801,116 +801,188 @@ export const PRELOADED_RECOVERY_DATA = {
           "id": "drawers-1",
           "type": "drawers",
           "name": "서랍장",
-          "x": 6,
-          "y": 0.5,
+          "x": 6.75,
+          "y": 0,
           "rotated": false,
-          "slots": 6,
-          "z": 0
+          "z": 0,
+          "customSize": {
+            "w": 1.5,
+            "d": 1.25
+          },
+          "slots": 4
         },
         {
-          "id": "shelf-sub",
+          "id": "shelf-1",
           "type": "shelf",
-          "name": "서브 책장",
-          "x": 0.5,
-          "y": 0.5,
+          "name": "책장",
+          "x": 0,
+          "y": 0,
           "rotated": false,
-          "slots": 4,
-          "z": 0
-        },
-        {
-          "id": "shelf-shoe",
-          "type": "organizer",
-          "name": "신발장 옆 공간",
-          "x": 0.5,
-          "y": 8,
-          "rotated": false,
-          "slots": 2,
-          "z": 0
+          "z": 0,
+          "customSize": {
+            "w": 3,
+            "d": 1.5
+          }
         },
         {
           "id": "bed-1",
           "type": "bed",
           "name": "침대",
-          "x": 0.5,
-          "y": 3.5,
+          "x": 0,
+          "y": 5.25,
           "rotated": false,
-          "slots": 1,
-          "z": 0
+          "z": 0,
+          "bedFlipped": true,
+          "customSize": {
+            "w": 3.5,
+            "d": 6.75
+          }
         },
         {
           "id": "desk-1",
           "type": "desk",
           "name": "책상",
-          "x": 6,
-          "y": 6,
+          "x": 5.5,
+          "y": 5.25,
           "rotated": false,
-          "slots": 1,
-          "z": 0
-        },
-        {
-          "id": "desk-drawer",
-          "type": "drawers",
-          "name": "책상 서랍",
-          "x": 8.75,
-          "y": 6,
-          "rotated": false,
-          "slots": 3,
-          "z": 0
+          "z": 0,
+          "customSize": {
+            "w": 6.5,
+            "d": 2
+          }
         },
         {
           "id": "wardrobe-1",
           "type": "wardrobe",
           "name": "옷장",
-          "x": 7,
-          "y": 3.75,
+          "x": 3.5,
+          "y": 9.75,
           "rotated": false,
+          "z": 0,
+          "customSize": {
+            "w": 4.5,
+            "d": 2.25
+          }
+        },
+        {
+          "id": "organizer-1",
+          "type": "organizer",
+          "name": "정리함",
+          "x": 0,
+          "y": 1.5,
+          "rotated": false,
+          "z": 0,
+          "customSize": {
+            "w": 2.25,
+            "d": 1.75
+          },
+          "slots": 1
+        },
+        {
+          "id": "8aac998a-f107-45b4-a04b-71d9e9124ab6",
+          "type": "wardrobe",
+          "name": "행거",
+          "x": 8,
+          "y": 10.75,
+          "z": 0,
+          "rotated": false,
+          "customSize": {
+            "w": 4,
+            "d": 1.25
+          }
+        },
+        {
+          "id": "afbe3d60-44f4-406a-9656-23ca11882500",
+          "type": "drawers",
+          "name": "책상 서랍",
+          "x": 5.5,
+          "y": 3.75,
+          "z": 0,
+          "rotated": false,
+          "customSize": {
+            "w": 1.5,
+            "d": 1.5
+          },
+          "slots": 4
+        },
+        {
+          "id": "d2c0ed49-2e6e-479f-b621-23e1ca4b649f",
+          "type": "drawers",
+          "name": "화장대 서랍",
+          "x": 3,
+          "y": 0,
+          "z": 0,
+          "rotated": false,
+          "stackedSize": {
+            "w": 3.75,
+            "d": 2.25
+          },
+          "sizeLevel": 0
+        },
+        {
+          "id": "ef9804ec-63a4-4fb1-a87a-73f29ca47076",
+          "type": "shelf",
+          "name": "서브 책장",
+          "x": 8.25,
+          "y": 0,
+          "z": 0,
+          "rotated": false,
+          "customSize": {
+            "w": 3.75,
+            "d": 1.25
+          },
           "slots": 3,
-          "z": 0
+          "stackedSize": {
+            "w": 3.75,
+            "d": 1.25
+          },
+          "sizeLevel": 0
+        },
+        {
+          "id": "b16f8b43-0c0c-4e41-b77a-560189cb2ff3",
+          "type": "desk",
+          "name": "화장대",
+          "x": 3,
+          "y": 0,
+          "z": 0,
+          "rotated": false,
+          "stackedSize": {
+            "w": 3.75,
+            "d": 2.25
+          },
+          "sizeLevel": 0,
+          "stackedOn": "d2c0ed49-2e6e-479f-b621-23e1ca4b649f"
+        },
+        {
+          "id": "d2ca744a-b000-4381-8bf4-325110cffcc8",
+          "type": "organizer",
+          "name": "서브 책장 위",
+          "x": 8.25,
+          "y": 0,
+          "z": 0,
+          "rotated": false,
+          "stackedSize": {
+            "w": 3.75,
+            "d": 1.25
+          },
+          "sizeLevel": 0,
+          "stackedOn": "ef9804ec-63a4-4fb1-a87a-73f29ca47076",
+          "slots": 0
         }
       ],
       "door": {
         "offset": 6.8,
         "reversed": false
-      },
-      "createdAt": "2026-09-19T05:26:47.548Z"
+      }
     },
     {
-      "id": "room-1789795641384",
-      "name": "안방",
-      "furniture": [
-        {
-          "id": "drawers-1789795641384",
-          "type": "drawers",
-          "name": "서랍장",
-          "x": 6,
-          "y": 0.5,
-          "rotated": false,
-          "z": 0
-        },
-        {
-          "id": "shelf-1789795641384",
-          "type": "shelf",
-          "name": "책장",
-          "x": 0.5,
-          "y": 0.5,
-          "rotated": false,
-          "z": 0
-        },
-        {
-          "id": "organizer-1789795641384",
-          "type": "organizer",
-          "name": "정리함",
-          "x": 4,
-          "y": 7.75,
-          "rotated": false,
-          "z": 0
-        }
-      ],
+      "id": "room-1789897886726",
+      "name": "거실",
+      "furniture": [],
       "door": {
-        "offset": 3,
+        "offset": 6.8,
         "reversed": false
-      },
-      "createdAt": "2026-09-19T05:27:21.384Z"
+      }
     }
   ],
   "activeRoomId": "room-1"
