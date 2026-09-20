@@ -89,7 +89,7 @@ export default function ItemCard({
       <>
         <div
           onClick={handleCardClick}
-          className={`fluffy-card p-4 sm:p-5 transition-all hover:-translate-y-1 hover:shadow-[0_16px_36px_rgba(74,62,61,0.12)] flex flex-col justify-between h-full min-h-[350px] bg-white relative border group cursor-pointer ${
+          className={`fluffy-card p-3 sm:p-4 transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(74,62,61,0.1)] flex flex-col justify-between h-full min-h-[285px] sm:min-h-[305px] bg-white relative border group cursor-pointer ${
             isSelected
               ? 'ring-2 ring-[#B56562] bg-[#FFF9F7] border-[#FFB7B2] shadow-sm'
               : 'border-[#F6EFEA]'
@@ -97,9 +97,9 @@ export default function ItemCard({
         >
           {/* 선택 모드 체크박스 */}
           {isSelectMode && (
-            <div className="absolute top-3 left-3 z-20">
+            <div className="absolute top-2.5 left-2.5 z-20">
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all shadow-sm ${
+                className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black transition-all shadow-sm ${
                   isSelected
                     ? 'bg-[#B56562] text-white scale-110'
                     : 'border-2 border-[#D9CBC5] bg-white/95 text-transparent'
@@ -111,8 +111,8 @@ export default function ItemCard({
           )}
 
           <div className="flex flex-col flex-1">
-            {/* 썸네일 / 이모지 영역: 넉넉한 높이(h-36 sm:h-40)와 고정 규격 */}
-            <div className="w-full h-36 sm:h-40 rounded-2xl bg-gradient-to-b from-[#FFF8F5] to-[#FFF1EB] border border-[#F2ECE6] relative overflow-hidden flex items-center justify-center mb-3 shrink-0">
+            {/* 썸네일 / 이모지 영역 */}
+            <div className="w-full h-28 sm:h-32 rounded-xl bg-gradient-to-b from-[#FFF8F5] to-[#FFF1EB] border border-[#F2ECE6] relative overflow-hidden flex items-center justify-center mb-2.5 shrink-0">
               {!imgError && item.imageUrl ? (
                 <img
                   src={item.imageUrl}
@@ -121,15 +121,15 @@ export default function ItemCard({
                   onError={() => setImgError(true)}
                 />
               ) : (
-                <span className="text-5xl sm:text-6xl drop-shadow-xs transition-transform group-hover:scale-110 select-none">
+                <span className="text-4xl sm:text-5xl drop-shadow-xs transition-transform group-hover:scale-110 select-none">
                   {emoji}
                 </span>
               )}
 
               {/* 카테고리 뱃지 (상단 좌측 오버레이) */}
               <span
-                className={`absolute text-xs font-bold text-[#B56562] bg-white/95 backdrop-blur-xs px-2.5 py-1 rounded-full shadow-xs border border-[#FFDCD6] ${
-                  isSelectMode ? 'top-3 left-11' : 'top-3 left-3'
+                className={`absolute text-[11px] font-bold text-[#B56562] bg-white/95 backdrop-blur-xs px-2 py-0.5 rounded-full shadow-xs border border-[#FFDCD6] ${
+                  isSelectMode ? 'top-2.5 left-9' : 'top-2.5 left-2.5'
                 }`}
               >
                 {item.category}
@@ -144,38 +144,38 @@ export default function ItemCard({
                     setIsEditing(true);
                   }}
                   title="수정하기"
-                  className="absolute top-3 right-3 p-1.5 rounded-full bg-white/95 text-[#9A8784] hover:text-[#B56562] shadow-xs hover:bg-white transition-all"
+                  className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-white/95 text-[#9A8784] hover:text-[#B56562] shadow-xs hover:bg-white transition-all"
                 >
-                  <Icon name="pencil" size={15} />
+                  <Icon name="pencil" size={13} />
                 </button>
               )}
             </div>
 
-            {/* 물건 이름: 2줄 규격 높이(min-h-[2.85rem]) 고정으로 줄바꿈 상관없이 완벽 수평 일치 */}
-            <div className="min-h-[2.85rem] flex items-center">
+            {/* 물건 이름: 2줄 규격 높이 */}
+            <div className="min-h-[2.4rem] flex items-center">
               <h3
-                className="text-sm sm:text-base font-bold text-[#4A3E3D] break-words line-clamp-2 leading-snug"
+                className="text-xs sm:text-sm font-bold text-[#4A3E3D] break-words line-clamp-2 leading-snug"
                 title={item.name}
               >
                 {item.name}
               </h3>
             </div>
 
-            {/* 위치 & 크기 칩: 고정 높이와 정돈된 여백 */}
-            <div className="flex flex-wrap items-center gap-1.5 mt-2.5 min-h-[1.75rem]">
+            {/* 위치 & 크기 칩 */}
+            <div className="flex flex-wrap items-center gap-1 mt-2 min-h-[1.5rem]">
               <span
-                className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE] truncate max-w-full flex items-center gap-1"
+                className="text-[10px] sm:text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE] truncate max-w-full flex items-center gap-1"
                 title={item.location || '미분류'}
               >
-                <Icon name="pin" size={11} className="shrink-0 text-[#B56562]" />
+                <Icon name="pin" size={10} className="shrink-0 text-[#B56562]" />
                 <span className="truncate">{item.location || '미분류'}</span>
               </span>
-              <span className="text-[11px] font-medium px-2.5 py-1 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE]">
+              <span className="text-[10px] sm:text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE]">
                 📏 {sizeLabels[item.size] || item.size}
               </span>
               {item.status && item.status !== 'active' && (
                 <span
-                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
                     statusColors[item.status] || 'bg-gray-100 text-gray-600'
                   }`}
                 >
@@ -185,10 +185,10 @@ export default function ItemCard({
             </div>
           </div>
 
-          {/* 하단 사용도 선택기: mt-auto로 모든 카드의 바닥 선이 완벽하게 일치 */}
-          <div className="mt-auto pt-3 border-t border-[#F5EFEA] flex items-center justify-between gap-1">
-            <span className="text-xs font-bold text-[#8A7977]">사용도</span>
-            <div className="inline-flex rounded-full bg-[#FAF8F5] p-0.5 border border-[#EDE5DE] gap-1">
+          {/* 하단 사용도 선택기 */}
+          <div className="mt-auto pt-2.5 border-t border-[#F5EFEA] flex items-center justify-between gap-1">
+            <span className="text-[11px] font-bold text-[#8A7977]">사용도</span>
+            <div className="inline-flex rounded-full bg-[#FAF8F5] p-0.5 border border-[#EDE5DE] gap-0.5">
               {Object.values(USAGE_CONFIG).map((cfg) => {
                 const isUsageSelected = (item.usage || 'frequent') === cfg.id;
                 return (
@@ -199,7 +199,7 @@ export default function ItemCard({
                       e.stopPropagation();
                       handleUsageChange(cfg.id);
                     }}
-                    className={`w-7 h-7 rounded-full text-xs font-bold transition-all flex items-center justify-center ${
+                    className={`w-6 h-6 rounded-full text-xs font-bold transition-all flex items-center justify-center ${
                       isUsageSelected
                         ? `${cfg.badgeClass} border shadow-xs scale-105`
                         : 'text-[#9C8B88] hover:text-[#4A3E3D] hover:bg-[#FFF0EE]'
@@ -236,18 +236,18 @@ export default function ItemCard({
     <>
       <div
         onClick={handleCardClick}
-        className={`fluffy-card p-4 sm:p-5 transition-all hover:-translate-y-0.5 hover:shadow-[0_16px_36px_rgba(74,62,61,0.1)] cursor-pointer border flex flex-col justify-between h-full min-h-[190px] ${
+        className={`fluffy-card p-3 sm:p-4 transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(74,62,61,0.08)] cursor-pointer border flex flex-col justify-between h-full min-h-[150px] ${
           isSelected
             ? 'ring-2 ring-[#B56562] bg-[#FFF9F7] border-[#FFB7B2]'
             : 'border-[#F6EFEA]'
         }`}
       >
-        <div className="flex items-start gap-4 flex-1">
+        <div className="flex items-start gap-3 sm:gap-3.5 flex-1">
           {/* 선택 모드 체크박스 */}
           {isSelectMode && (
-            <div className="shrink-0 flex items-center pt-2 self-start">
+            <div className="shrink-0 flex items-center pt-1 self-start">
               <div
-                className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-black transition-all shadow-xs ${
+                className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] font-black transition-all shadow-xs ${
                   isSelected
                     ? 'bg-[#B56562] text-white scale-110'
                     : 'border-2 border-[#D9CBC5] bg-white text-transparent'
@@ -258,8 +258,8 @@ export default function ItemCard({
             </div>
           )}
 
-          {/* 좌측 썸네일 / 이모지: w-20 h-20 고정 규격 */}
-          <div className="w-20 h-20 rounded-2xl overflow-hidden bg-gradient-to-b from-[#FFF8F5] to-[#FFF1EB] border border-[#F2ECE6] shrink-0 shadow-xs flex items-center justify-center relative">
+          {/* 좌측 썸네일 / 이모지 */}
+          <div className="w-16 h-16 rounded-xl overflow-hidden bg-gradient-to-b from-[#FFF8F5] to-[#FFF1EB] border border-[#F2ECE6] shrink-0 shadow-xs flex items-center justify-center relative">
             {!imgError && item.imageUrl ? (
               <img
                 src={item.imageUrl}
@@ -268,7 +268,7 @@ export default function ItemCard({
                 onError={() => setImgError(true)}
               />
             ) : (
-              <span className="text-4xl select-none">{emoji}</span>
+              <span className="text-3xl select-none">{emoji}</span>
             )}
           </div>
 

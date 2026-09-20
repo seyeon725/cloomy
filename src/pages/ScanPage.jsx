@@ -33,7 +33,15 @@ function loadImage(dataUrl) {
   });
 }
 
-export default function ScanPage({ itemsHook, onRegistered, roomFurniture = [], onUnsavedChange, onAddSlot }) {
+export default function ScanPage({
+  itemsHook,
+  onRegistered,
+  rooms = [],
+  activeRoomId,
+  roomFurniture = [],
+  onUnsavedChange,
+  onAddSlot,
+}) {
   const { addItems, updateMultipleItems, items: existingItems } = itemsHook;
   const [step, setStep] = useState('camera'); // camera | loading | results | manual
   const [recognizedItems, setRecognizedItems] = useState([]);
@@ -90,21 +98,25 @@ export default function ScanPage({ itemsHook, onRegistered, roomFurniture = [], 
 
   const handleSave = (selectedItems, location, meta = {}, resolutionPlan = null) => {
     try {
+      const targetRoomId = meta.roomId || activeRoomId;
       if (resolutionPlan) {
         if (resolutionPlan.itemsToUpdate && resolutionPlan.itemsToUpdate.length > 0) {
-          updateMultipleItems(resolutionPlan.itemsToUpdate);
+          const updatedWithRoom = resolutionPlan.itemsToUpdate.map(i => ({ ...i, roomId: targetRoomId }));
+          updateMultipleItems(updatedWithRoom);
         }
         if (resolutionPlan.itemsToAdd && resolutionPlan.itemsToAdd.length > 0) {
-          addItems(resolutionPlan.itemsToAdd, location);
+          const addedWithRoom = resolutionPlan.itemsToAdd.map(i => ({ ...i, roomId: targetRoomId }));
+          addItems(addedWithRoom, location);
         }
       } else if (selectedItems && selectedItems.length > 0) {
-        addItems(selectedItems, location);
+        const withRoom = selectedItems.map(i => ({ ...i, roomId: targetRoomId }));
+        addItems(withRoom, location);
       }
       setStep('camera');
       setRecognizedItems([]);
       setCurrentPhoto(null);
       setManualItems([]);
-      if (onRegistered) onRegistered(meta);
+      if (onRegistered) onRegistered({ ...meta, roomId: targetRoomId });
     } catch (err) {
       console.error('Save error:', err);
       alert('물건 저장 중 오류가 발생했습니다.');
@@ -170,6 +182,8 @@ export default function ScanPage({ itemsHook, onRegistered, roomFurniture = [], 
           items={recognizedItems}
           onSave={handleSave}
           onCancel={handleCancel}
+          rooms={rooms}
+          activeRoomId={activeRoomId}
           roomFurniture={roomFurniture}
           cancelLabel={currentPhoto ? '다시 찍기' : '← 돌아가기'}
           existingItems={existingItems}

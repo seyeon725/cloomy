@@ -116,11 +116,15 @@ export default function App() {
 
   const handleRegistered = (meta = {}) => {
     setHasUnsavedScan(false);
+    const targetRoomId = meta.roomId || room.activeRoomId;
+    const targetRoom = room.rooms?.find(r => r.id === targetRoomId) || room.activeRoom;
+    const targetFurniture = targetRoom?.furniture || room.furniture;
+
     if (meta.newFurniture) {
       const { type, name, slots } = meta.newFurniture;
-      const pos = findOpenPosition(type, room.furniture);
+      const pos = findOpenPosition(type, targetFurniture);
       if (pos) {
-        room.setFurniture(prev => [...prev, {
+        const newFurnObj = {
           id: crypto.randomUUID(),
           type,
           name,
@@ -128,21 +132,34 @@ export default function App() {
           z: 0,
           rotated: false,
           slots: Number.isInteger(slots) ? slots : 1,
-        }]);
+        };
+        if (targetRoomId === room.activeRoomId) {
+          room.setFurniture(prev => [...prev, newFurnObj]);
+        } else if (room.updateRoomFurniture) {
+          room.updateRoomFurniture(targetRoomId, prev => [...prev, newFurnObj]);
+        }
+      }
+      if (targetRoomId && targetRoomId !== room.activeRoomId && room.setActiveRoomId) {
+        room.setActiveRoomId(targetRoomId);
       }
       setPendingNotice(`'${name}'을(를) 원하는 위치에 배치해주세요.`);
       setActiveTab('room');
     } else {
-      // Ensure furniture has enough slots if items were placed in a new slot
       if (meta.furnitureId && meta.slotIndex !== undefined) {
-        const furniture = room.furniture.find(f => f.id === meta.furnitureId);
+        const furniture = targetFurniture.find(f => f.id === meta.furnitureId);
         if (furniture) {
           const current = slotCount(furniture);
           const needed = meta.slotIndex + 1;
           if (current < needed) {
-            room.setFurniture(prev => prev.map(f =>
-              f.id === meta.furnitureId ? { ...f, slots: needed } : f
-            ));
+            if (targetRoomId === room.activeRoomId) {
+              room.setFurniture(prev => prev.map(f =>
+                f.id === meta.furnitureId ? { ...f, slots: needed } : f
+              ));
+            } else if (room.updateRoomFurniture) {
+              room.updateRoomFurniture(targetRoomId, prev => prev.map(f =>
+                f.id === meta.furnitureId ? { ...f, slots: needed } : f
+              ));
+            }
           }
         }
       }
@@ -263,6 +280,8 @@ export default function App() {
             <ScanPage
               key={scanResetKey}
               itemsHook={itemsHook}
+              rooms={room.rooms}
+              activeRoomId={room.activeRoomId}
               roomFurniture={room.furniture}
               onRegistered={handleRegistered}
               onUnsavedChange={setHasUnsavedScan}
@@ -272,6 +291,9 @@ export default function App() {
           {activeTab === 'dashboard' && (
             <DashboardPage
               itemsHook={itemsHook}
+              rooms={room.rooms}
+              activeRoomId={room.activeRoomId}
+              setActiveRoomId={room.setActiveRoomId}
               roomFurniture={room.furniture}
               onAddFurniture={handleAddFurniture}
               onStartDeclutter={handleStartDeclutter}

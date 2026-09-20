@@ -15,6 +15,9 @@ const statusOptions = [
 export default function Dashboard({
   items,
   stats,
+  rooms = [],
+  activeRoomId,
+  setActiveRoomId,
   onUpdate,
   onUpdateMultiple,
   onRemove,
@@ -24,6 +27,7 @@ export default function Dashboard({
   onStartDeclutter,
   onAddSlot,
 }) {
+  const [selectedFilterRoom, setSelectedFilterRoom] = useState('all');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [expandedFurn, setExpandedFurn] = useState(null);
@@ -143,16 +147,56 @@ export default function Dashboard({
   };
 
   const activeFilterCount =
+    (selectedFilterRoom !== 'all' ? 1 : 0) +
     (selectedCategory ? 1 : 0) +
     selectedLocations.length +
     (selectedUsage ? 1 : 0);
+
+  const currentRoomFurniture = useMemo(() => {
+    if (selectedFilterRoom === 'all') {
+      if (rooms && rooms.length > 0) {
+        const allFurn = rooms.flatMap((r) => r.furniture || []);
+        const unique = [];
+        const seenNames = new Set();
+        for (const f of allFurn) {
+          if (!seenNames.has(f.name)) {
+            seenNames.add(f.name);
+            unique.push(f);
+          }
+        }
+        return unique.length > 0 ? unique : roomFurniture;
+      }
+      return roomFurniture;
+    }
+    const found = rooms.find((r) => r.id === selectedFilterRoom);
+    return found?.furniture || roomFurniture;
+  }, [selectedFilterRoom, rooms, roomFurniture]);
+
+  const isItemInSelectedRoom = (item) => {
+    if (selectedFilterRoom === 'all') return true;
+    if (item.roomId) {
+      return item.roomId === selectedFilterRoom;
+    }
+    const rawLoc = (item.location || '').trim();
+    const furnName = rawLoc.includes(' · ') ? rawLoc.slice(0, rawLoc.indexOf(' · ')).trim() : rawLoc;
+    const targetRoom = rooms.find((r) => r.id === selectedFilterRoom);
+    if (targetRoom && (targetRoom.furniture || []).some((f) => f.name === furnName)) {
+      return true;
+    }
+    const firstRoom = rooms[0];
+    if (firstRoom && firstRoom.id === selectedFilterRoom) {
+      const isClaimedByOther = rooms.some((r) => r.id !== firstRoom.id && (r.furniture || []).some((f) => f.name === furnName));
+      return !isClaimedByOther;
+    }
+    return false;
+  };
 
   const furnitureGroups = useMemo(() => {
     const furnMap = new Map();
     const getIcon = (furnName) => {
       if (furnName === '바닥 보관') return '🧺';
       if (furnName === '미분류') return '📍';
-      const f = roomFurniture.find((rf) => rf.name === furnName);
+      const f = currentRoomFurniture.find((rf) => rf.name === furnName);
       if (f && f.type) {
         const icons = { drawers: '🗄️', shelf: '📚', desk: '🖥️', bed: '🛏️', wardrobe: '👗', organizer: '📦' };
         return icons[f.type] || '🗄️';
@@ -160,11 +204,13 @@ export default function Dashboard({
       return '🏠';
     };
 
-    for (const f of roomFurniture) {
+    for (const f of currentRoomFurniture) {
       furnMap.set(f.name, { id: f.id, name: f.name, icon: getIcon(f.name), totalCount: 0, slots: new Map() });
     }
 
-    for (const item of items) {
+    const roomItems = items.filter(isItemInSelectedRoom);
+
+    for (const item of roomItems) {
       const rawLoc = (item.location || '미분류').trim();
       let furnName = rawLoc;
       let slotPart = null;
@@ -193,7 +239,7 @@ export default function Dashboard({
         slots: Array.from(g.slots.values()).sort((a, b) => a.label.localeCompare(b.label, 'ko', { numeric: true })),
       }))
       .sort((a, b) => b.totalCount - a.totalCount);
-  }, [items, roomFurniture]);
+  }, [items, currentRoomFurniture, selectedFilterRoom, rooms]);
 
   const toggleFurniture = (furn) => {
     const furnKey = `furn:${furn.name}`;
@@ -246,6 +292,7 @@ export default function Dashboard({
   };
 
   const filteredItems = useMemo(() => items.filter((item) => {
+    if (!isItemInSelectedRoom(item)) return false;
     if (selectedStatus !== 'all' && item.status !== selectedStatus) return false;
     if (selectedCategory && item.category !== selectedCategory) return false;
     if (selectedUsage && (item.usage || 'frequent') !== selectedUsage) return false;
@@ -272,9 +319,10 @@ export default function Dashboard({
       if (!nameMatch && !descMatch && !catMatch && !locMatch) return false;
     }
     return true;
-  }), [items, selectedStatus, selectedCategory, selectedLocations, selectedUsage, searchQuery]);
+  }), [items, selectedFilterRoom, rooms, selectedStatus, selectedCategory, selectedLocations, selectedUsage, searchQuery]);
 
   const clearAllFilters = () => {
+    setSelectedFilterRoom('all');
     setSelectedCategory(null);
     setSelectedLocations([]);
     setSelectedUsage(null);
@@ -282,7 +330,7 @@ export default function Dashboard({
     setExpandedFurn(null);
     setSearchQuery('');
   };
-  const isFiltered = selectedCategory || selectedLocations.length > 0 || selectedUsage || selectedStatus !== 'all' || !!searchQuery.trim();
+  const isFiltered = selectedFilterRoom !== 'all' || selectedCategory || selectedLocations.length > 0 || selectedUsage || selectedStatus !== 'all' || !!searchQuery.trim();
 
   const handleBatchRecalibrate = (referenceItem, updatedList) => {
     const sizeOrder = ['tiny', 'small', 'medium', 'large'];
@@ -382,12 +430,12 @@ export default function Dashboard({
         </button>
       </div>
 
-      {/* 🎛️ 필터링 버튼 클릭 시 펼쳐지는 상세 필터 패널 */}
+      {/* 필터링 버튼 클릭 시 펼쳐지는 상세 필터 패널 */}
       {showFilters && (
         <div className="space-y-3 p-4 sm:p-5 bg-gradient-to-b from-[#FFF9F5] to-[#FFF4ED] border border-[#FFDAC1] rounded-[28px] shadow-sm animate-fadeIn">
           <div className="flex items-center justify-between px-1">
             <span className="text-xs sm:text-sm font-extrabold text-[#7D5E53] flex items-center gap-1.5">
-              <span>🎛️</span> 상세 필터링 (카테고리 · 위치 · 사용 빈도)
+              상세 필터링 (카테고리 · 위치 · 사용 빈도)
             </span>
             <button
               type="button"
@@ -405,7 +453,7 @@ export default function Dashboard({
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3.5">
                     <h3 className="text-base sm:text-lg font-extrabold text-[#4A3E3D]">
-                      📊 카테고리별 <span className="text-xs font-medium text-[#9A8784]">(모아보기)</span>
+                      카테고리별 <span className="text-xs font-medium text-[#9A8784]">(모아보기)</span>
                     </h3>
                     {selectedCategory && (
                       <button
@@ -447,19 +495,20 @@ export default function Dashboard({
             )}
 
             {/* 2. 위치별 */}
-            {furnitureGroups.length > 0 && (
+            {(furnitureGroups.length > 0 || (rooms && rooms.length > 0)) && (
               <section className="fluffy-card p-4 sm:p-5 h-full flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <h3 className="text-base sm:text-lg font-extrabold text-[#4A3E3D] flex items-center gap-1.5">
-                      <span>📍</span> 위치별 <span className="text-xs font-medium text-[#9A8784]">(칸/중복 선택)</span>
+                      위치별 <span className="text-xs font-medium text-[#9A8784]">(칸/중복 선택)</span>
                     </h3>
-                    {selectedLocations.length > 0 && (
+                    {(selectedLocations.length > 0 || selectedFilterRoom !== 'all') && (
                       <button
                         type="button"
                         onClick={() => {
                           setSelectedLocations([]);
                           setExpandedFurn(null);
+                          setSelectedFilterRoom('all');
                         }}
                         className="fluffy-button text-xs font-bold text-[#B56562] bg-[#FFF0EE] px-2.5 py-1"
                       >
@@ -467,10 +516,74 @@ export default function Dashboard({
                       </button>
                     )}
                   </div>
+
+                  {/* 방 구분 선택 바 */}
+                  {rooms && rooms.length > 0 && (
+                    <div className="mb-3 pt-1 pb-2.5 border-b border-[#F4EEEA]">
+                      <div className="text-[11px] font-extrabold text-[#806F6D] mb-1.5 flex items-center justify-between">
+                        <span>방 선택</span>
+                        {selectedFilterRoom !== 'all' && (
+                          <span className="text-[11px] text-[#B56562] font-bold">
+                            {rooms.find((r) => r.id === selectedFilterRoom)?.name || '방'} 필터 적용 중
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFilterRoom('all');
+                            setSelectedLocations([]);
+                            setExpandedFurn(null);
+                          }}
+                          className={`fluffy-button px-2.5 py-1 text-xs rounded-xl font-bold transition-all ${
+                            selectedFilterRoom === 'all'
+                              ? 'bg-[#4A3E3D] text-white shadow-xs'
+                              : 'bg-[#FAF8F5] text-[#806F6D] hover:bg-[#FFF5EE] border border-[#EFE5DC]'
+                          }`}
+                        >
+                          전체 방
+                        </button>
+                        {rooms.map((r) => {
+                          const isRoomSelected = selectedFilterRoom === r.id;
+                          const roomItemCount = items.filter((item) => {
+                            if (item.roomId) return item.roomId === r.id;
+                            const rawLoc = (item.location || '').trim();
+                            const furnName = rawLoc.includes(' · ') ? rawLoc.slice(0, rawLoc.indexOf(' · ')).trim() : rawLoc;
+                            return (r.furniture || []).some((f) => f.name === furnName);
+                          }).length;
+
+                          return (
+                            <button
+                              key={r.id}
+                              type="button"
+                              onClick={() => {
+                                setSelectedFilterRoom(r.id);
+                                setSelectedLocations([]);
+                                setExpandedFurn(null);
+                              }}
+                              className={`fluffy-button px-2.5 py-1 text-xs rounded-xl font-bold transition-all flex items-center gap-1 ${
+                                isRoomSelected
+                                  ? 'bg-[#FFB7B2] text-[#4A3E3D] font-extrabold ring-2 ring-[#FF9E99] shadow-xs'
+                                  : 'bg-[#FAF8F5] text-[#806F6D] hover:bg-[#FFF5EE] border border-[#EFE5DC]'
+                              }`}
+                            >
+                              <span>{r.name}</span>
+                              <span className="text-[10px] opacity-75 font-normal">({roomItemCount})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
                   <p className="text-xs text-[#9A8784] mb-3">가구 클릭 시 칸 선택 서랍이 열려요</p>
 
                   {/* 가구 칩 버튼 목록 */}
-                  <div className="flex flex-wrap gap-2">
+                  {furnitureGroups.length === 0 ? (
+                    <p className="text-xs text-[#9A8784] py-3 text-center">선택한 방에 보관된 가구/물건이 없어요.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
                     {furnitureGroups.map((g) => {
                       const isWholeSelected = selectedLocations.includes(`furn:${g.name}`);
                       const selectedSlotCount = g.slots.filter((s) => selectedLocations.includes(`slot:${s.fullLocation}`)).length;
@@ -517,7 +630,8 @@ export default function Dashboard({
                         </div>
                       );
                     })}
-                  </div>
+                    </div>
+                  )}
 
                   {/* 가구 칸 서랍 */}
                   {expandedFurn && (() => {
@@ -582,7 +696,7 @@ export default function Dashboard({
               <div>
                 <div className="flex items-center justify-between gap-2 mb-3.5">
                   <h3 className="text-base sm:text-lg font-extrabold text-[#4A3E3D]">
-                    ⏱️ 사용 빈도별 <span className="text-xs font-medium text-[#9A8784]">(모아보기)</span>
+                    사용 빈도별 <span className="text-xs font-medium text-[#9A8784]">(모아보기)</span>
                   </h3>
                   {selectedUsage && (
                     <button
@@ -631,6 +745,22 @@ export default function Dashboard({
         <div className="flex items-center justify-between gap-3 rounded-[24px] bg-[#FFF0E5] p-3.5 sm:p-4 shadow-[0_10px_30px_rgba(74,62,61,0.06)] flex-wrap">
           <div className="flex items-center gap-2 flex-wrap text-xs sm:text-sm">
             <span className="font-extrabold text-[#80604F]">🏷️ 적용된 필터:</span>
+            {selectedFilterRoom !== 'all' && (
+              <span className="bg-white px-2.5 py-1 rounded-xl text-[#B56562] font-bold border border-[#FFDAC1] flex items-center gap-1 shadow-xs">
+                방: {rooms.find((r) => r.id === selectedFilterRoom)?.name || '선택된 방'}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedFilterRoom('all');
+                    setSelectedLocations([]);
+                    setExpandedFurn(null);
+                  }}
+                  className="hover:text-red-500 font-black"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
             {searchQuery && (
               <span className="bg-white px-2.5 py-1 rounded-xl text-[#B56562] font-bold border border-[#FFDAC1] flex items-center gap-1 shadow-xs">
                 검색: '{searchQuery}'
@@ -852,8 +982,8 @@ export default function Dashboard({
           <div
             className={
               viewMode === 'block'
-                ? 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 sm:gap-6'
-                : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4 sm:gap-5'
+                ? 'grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3 sm:gap-4.5'
+                : 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 sm:gap-4'
             }
           >
             {filteredItems.map((item) => {
@@ -866,7 +996,7 @@ export default function Dashboard({
                   onRemove={onRemove}
                   otherItems={nearby.length ? nearby : items.filter((other) => other.id !== item.id)}
                   onBatchRecalibrate={handleBatchRecalibrate}
-                  roomFurniture={roomFurniture}
+                  roomFurniture={currentRoomFurniture}
                   viewMode={viewMode}
                   isDeclutterMode={isDeclutterMode}
                   isEditMode={isEditMode}
@@ -966,7 +1096,7 @@ export default function Dashboard({
         <MoveItemsModal
           selectedItemCount={selectedItemIds.size}
           currentLocation=""
-          roomFurniture={roomFurniture}
+          roomFurniture={currentRoomFurniture}
           onConfirm={handleBatchMoveConfirm}
           onClose={() => setShowMoveModal(false)}
           onAddSlot={onAddSlot}
