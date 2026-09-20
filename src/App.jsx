@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { useAuth } from './hooks/useAuth';
 import { useItems } from './hooks/useItems';
 import ScanPage from './pages/ScanPage';
