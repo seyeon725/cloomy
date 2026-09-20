@@ -9,6 +9,7 @@ import RoomPage from './pages/RoomPage';
 import { useRoom, slotCount, findOpenPosition } from './hooks/useRoom';
 import UnsavedConfirmModal from './components/UnsavedConfirmModal';
 import AuthModal from './components/AuthModal';
+import DataRecoveryModal from './components/DataRecoveryModal';
 import { useCloudSync } from './hooks/useCloudSync';
 
 const TABS = [
@@ -32,6 +33,7 @@ export default function App() {
   const [scanResetKey, setScanResetKey] = useState(0);
   const [unsavedNavTarget, setUnsavedNavTarget] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showRecoveryModal, setShowRecoveryModal] = useState(false);
   const clearPendingNotice = useCallback(() => setPendingNotice(''), []);
 
   // 미저장 작업 중 브라우저 새로고침/종료 방지
@@ -247,6 +249,16 @@ export default function App() {
             등록 물건 {itemsHook.items.length}개
           </span>
 
+          {/* 데이터 복구 버튼 */}
+          <button
+            type="button"
+            onClick={() => setShowRecoveryModal(true)}
+            className="text-[11px] font-bold text-[#B56562] bg-[#FFF0EE] hover:bg-[#FFE5E0] px-2.5 py-1.5 rounded-full border border-[#FFD5CF] transition-all cursor-pointer whitespace-nowrap shadow-xs"
+            title="이전 데이터(42개) 복구 또는 다른 주소에서 백업 가져오기"
+          >
+            데이터 복구
+          </button>
+
           {/* 클라우드 동기화 상태 뱃지 */}
           {isLoggedIn && (
             <div
@@ -312,6 +324,22 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* 데이터 복구 알림 배너 */}
+      {itemsHook.items.length <= 11 && (
+        <div className="bg-[#FFF8F0] border-b border-[#FFE8D6] px-4 py-2 flex items-center justify-between text-xs text-[#8A5D4D]">
+          <span className="truncate">
+            💡 이전 물건(42개)이 보이지 않으시나요? 브라우저 저장소나 다른 주소에서 바로 복구할 수 있어요.
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowRecoveryModal(true)}
+            className="ml-2 px-2.5 py-1 rounded-xl bg-[#B56562] text-white font-bold text-[11px] hover:bg-[#9E4E4B] transition-all shrink-0 cursor-pointer shadow-xs"
+          >
+            복구 도구 열기
+          </button>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto pb-16 sm:pb-20">
@@ -410,6 +438,15 @@ export default function App() {
         onLoginGoogle={authHook.loginWithGoogle}
         onLogout={authHook.logout}
         onContinueGuest={authHook.continueAsGuest}
+      />
+
+      {/* 데이터 복구 / 백업 모달 */}
+      <DataRecoveryModal
+        isOpen={showRecoveryModal}
+        onClose={() => setShowRecoveryModal(false)}
+        itemsHook={itemsHook}
+        room={room}
+        user={user}
       />
     </div>
   );
