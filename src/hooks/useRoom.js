@@ -105,17 +105,26 @@ const loadLegacyFurniture = (userId) => {
 
 const loadRooms = (userId) => {
   try {
-    const raw = localStorage.getItem(roomsKey(userId));
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((r, i) => ({
-          id: r.id || `room-${i + 1}`,
-          name: r.name || (i === 0 ? '내 방' : `방 ${i + 1}`),
-          furniture: Array.isArray(r.furniture) ? separateFurniture(r.furniture) : (i === 0 ? separateFurniture(initial) : []),
-          door: r.door || DEFAULT_DOOR,
-        }));
-      }
+    const rawUser = localStorage.getItem(roomsKey(userId));
+    const rawGuest = localStorage.getItem('cloomy_rooms');
+    const parsedUser = rawUser ? JSON.parse(rawUser) : null;
+    const parsedGuest = rawGuest ? JSON.parse(rawGuest) : null;
+
+    // 게스트 방 목록에 더 많은 방(거실 등)이 있으면 게스트 방 목록 우선 복원
+    const source =
+      Array.isArray(parsedGuest) && parsedGuest.length > (parsedUser?.length || 0)
+        ? parsedGuest
+        : Array.isArray(parsedUser) && parsedUser.length > 0
+        ? parsedUser
+        : parsedGuest;
+
+    if (Array.isArray(source) && source.length > 0) {
+      return source.map((r, i) => ({
+        id: r.id || `room-${i + 1}`,
+        name: r.name || (i === 0 ? '내 방' : `방 ${i + 1}`),
+        furniture: Array.isArray(r.furniture) ? separateFurniture(r.furniture) : (i === 0 ? separateFurniture(initial) : []),
+        door: r.door || DEFAULT_DOOR,
+      }));
     }
   } catch {}
 

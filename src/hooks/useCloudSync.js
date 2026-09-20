@@ -57,30 +57,55 @@ export function useCloudSync({ user, itemsHook, room }) {
         }
         const currentActiveRoomId = room.activeRoomId;
 
-        if (cloudData && Array.isArray(cloudData.items) && cloudData.items.length > 0) {
-          // 클라우드에 기존 데이터가 있는 경우: 클라우드 데이터를 로컬에 적용!
-          console.log(`[CloudSync] 클라우드에서 ${cloudData.items.length}개 물건 불러옴.`);
-          isApplyingRemoteRef.current = true;
-          itemsHook.setItems(cloudData.items);
-          if (Array.isArray(cloudData.rooms) && cloudData.rooms.length > 0) {
-            room.setRooms(cloudData.rooms);
-          }
-          if (cloudData.activeRoomId) {
-            room.setActiveRoomId(cloudData.activeRoomId);
-          }
-          setTimeout(() => {
-            isApplyingRemoteRef.current = false;
-          }, 400);
-          lastCloudTimestampRef.current = cloudData.deviceUpdatedAt || Date.now();
-        } else if (currentLocalItems.length > 0) {
-          // 클라우드가 비어있지만 현재 기기(PC)에 로컬 데이터가 있는 경우: 클라우드로 업로드!
-          console.log(`[CloudSync] 로컬 물건 ${currentLocalItems.length}개를 클라우드로 최초 업로드.`);
+        // 물건 스마트 병합 함수: id 기준으로 중복 없이 합쳐서 물건 유실을 원천 방지!
+        const mergeItemsSafely = (listA, listB) => {
+          const map = new Map();
+          (listA || []).forEach((item) => {
+            if (item && item.id) map.set(item.id, item);
+          });
+          (listB || []).forEach((item) => {
+            if (item && item.id && !map.has(item.id)) {
+              map.set(item.id, item);
+            }
+          });
+          return Array.from(map.values());
+        };
+
+        const cloudItems = cloudData && Array.isArray(cloudData.items) ? cloudData.items : [];
+        const mergedItems = mergeItemsSafely(currentLocalItems, cloudItems);
+
+        // 방 목록도 더 많은 방(거실 등)을 보유한 쪽 우선 선택
+        const cloudRooms = cloudData && Array.isArray(cloudData.rooms) ? cloudData.rooms : [];
+        const mergedRooms =
+          currentLocalRooms.length >= cloudRooms.length ? currentLocalRooms : cloudRooms;
+
+        console.log(
+          `[CloudSync] 로컬(${currentLocalItems.length}개) + 클라우드(${cloudItems.length}개) -> 통합 ${mergedItems.length}개 물건 확정`
+        );
+
+        isApplyingRemoteRef.current = true;
+        itemsHook.setItems(mergedItems);
+        if (mergedRooms.length > 0) {
+          room.setRooms(mergedRooms);
+        }
+        if (cloudData?.activeRoomId) {
+          room.setActiveRoomId(cloudData.activeRoomId);
+        }
+        setTimeout(() => {
+          isApplyingRemoteRef.current = false;
+        }, 400);
+
+        // 통합된 물건 수가 클라우드보다 많으면 클라우드로 즉시 업로드 반영!
+        if (mergedItems.length > cloudItems.length || mergedRooms.length > cloudRooms.length) {
+          console.log(`[CloudSync] 통합된 최신 데이터(${mergedItems.length}개) 클라우드로 저장.`);
           await saveCloudData(userId, {
-            items: currentLocalItems,
-            rooms: currentLocalRooms,
+            items: mergedItems,
+            rooms: mergedRooms,
             activeRoomId: currentActiveRoomId,
           });
           lastCloudTimestampRef.current = Date.now();
+        } else {
+          lastCloudTimestampRef.current = cloudData?.deviceUpdatedAt || Date.now();
         }
 
         hasLoadedInitialCloudRef.current = true;

@@ -11,13 +11,48 @@ function storageKey(userId) {
 }
 
 function loadItems(userId) {
+  const allFound = [];
+  const idSet = new Set();
+
+  const addParsed = (parsed) => {
+    if (Array.isArray(parsed)) {
+      parsed.forEach((item) => {
+        if (item && item.id && !idSet.has(item.id)) {
+          idSet.add(item.id);
+          allFound.push(item);
+        }
+      });
+    }
+  };
+
   try {
-    const key = storageKey(userId);
-    const data = localStorage.getItem(key);
-    return data ? JSON.parse(data) : [];
-  } catch {
-    return [];
-  }
+    // 1. 현재 사용자 키
+    const userKey = storageKey(userId);
+    const userData = localStorage.getItem(userKey);
+    if (userData) addParsed(JSON.parse(userData));
+
+    // 2. 게스트 키 (게스트 상태에서 등록했던 42개 물건 누락 방지 및 자동 복원)
+    const guestData = localStorage.getItem(BASE_KEY);
+    if (guestData) addParsed(JSON.parse(guestData));
+
+    // 3. 브라우저 내 다른 모든 cloomy_items_* 키 탐색하여 누락된 물건 모두 복원
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (
+        k &&
+        (k.startsWith('cloomy_items') || k.startsWith('jeongnijjang_items')) &&
+        k !== userKey &&
+        k !== BASE_KEY
+      ) {
+        try {
+          const raw = localStorage.getItem(k);
+          if (raw) addParsed(JSON.parse(raw));
+        } catch {}
+      }
+    }
+  } catch {}
+
+  return allFound;
 }
 
 function saveItems(items, userId) {
