@@ -17,6 +17,7 @@ const CATEGORY_EMOJIS = {
 export default function UnplacedItemsModal({
   unplacedItems = [],
   roomFurniture = [],
+  roomName,
   onPlaceItems,
   onClose,
 }) {
@@ -74,7 +75,7 @@ export default function UnplacedItemsModal({
           <div className="flex items-start justify-between pb-3 border-b border-[#F4EEEA]">
             <div>
               <h2 className="text-xl font-extrabold text-[#4A3E3D]">
-                📍 위치를 정할 물건
+                📍 {roomName ? `${roomName}의 위치를 정할 물건` : '위치를 정할 물건'}
               </h2>
               <p className="mt-1 text-xs sm:text-sm text-[#806F6D]">
                 방에 아직 배치되지 않은 물건이 <b>{unplacedItems.length}개</b> 있어요.

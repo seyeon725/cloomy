@@ -4,6 +4,7 @@ import { slotCount, slotName, FLOOR_LOCATION } from '../hooks/useRoom';
 export default function PlacedSummaryModal({
   furniture = [],
   activeItems = [],
+  roomName,
   onSelectFurniture,
   onClose,
 }) {
@@ -82,7 +83,7 @@ export default function PlacedSummaryModal({
         <div className="flex items-start justify-between pb-3 border-b border-[#F4EEEA]">
           <div>
             <h2 className="text-xl font-extrabold text-[#4A3E3D]">
-              🏡 방에 배치한 물건
+              🏡 {roomName ? `${roomName}에 배치한 물건` : '방에 배치한 물건'}
             </h2>
             <p className="mt-1 text-xs sm:text-sm text-[#806F6D]">
               총 <b>{breakdown.totalPlaced}개</b>의 물건이 가구에 보관되어 있어요.

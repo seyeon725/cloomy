@@ -96,6 +96,27 @@ export default function App() {
     setActiveTab('chat');
   }, []);
 
+  // 기존 roomId가 없는 레거시 물건들에 대해 해당 가구가 속한 방 또는 첫 번째 방(내 방)의 roomId 자동 보정 및 영구 저장
+  const migratedRoomIdsRef = useRef(false);
+  useEffect(() => {
+    if (migratedRoomIdsRef.current || !itemsHook.items.length || !room.rooms.length) return;
+    const missingRoomItems = itemsHook.items.filter((i) => !i.roomId);
+    if (missingRoomItems.length > 0) {
+      migratedRoomIdsRef.current = true;
+      const updates = missingRoomItems.map((item) => {
+        const rawLoc = (item.location || '').trim();
+        const furnName = rawLoc.includes(' · ') ? rawLoc.slice(0, rawLoc.indexOf(' · ')).trim() : rawLoc;
+        let matchedRoomId = room.rooms[0]?.id || 'room-1';
+        if (furnName && furnName !== '바닥 보관' && furnName !== '미분류') {
+          const found = room.rooms.find((r) => (r.furniture || []).some((f) => f.name === furnName));
+          if (found) matchedRoomId = found.id;
+        }
+        return { id: item.id, roomId: matchedRoomId };
+      });
+      itemsHook.updateMultipleItems(updates);
+    }
+  }, [itemsHook.items, room.rooms, itemsHook.updateMultipleItems]);
+
   // 가구 칸 추가 핸들러 (방 가구와 즉시 연동 및 영구 저장)
   const handleAddSlot = useCallback(
     (furnitureId) => {

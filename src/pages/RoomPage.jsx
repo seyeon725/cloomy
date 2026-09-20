@@ -147,20 +147,92 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     ? (isFloor ? FLOOR_LOCATION : (hasSlots ? locationFor(selected, slot) : selected.name))
     : '';
   const location = currentTargetLocation;
-  const activeItems = items.filter(i => i.status !== 'discarded' && i.status !== 'trading');
-  const placed = activeItems.filter(i => room.locations.includes(i.location));
-  const unplacedItems = activeItems.filter(i => !room.locations.includes(i.location) || i.location === '미분류' || !i.location);
-  const contents = activeItems.filter(i => {
-    if (!selected) return false;
-    if (isFloor) return i.location === FLOOR_LOCATION;
-    if (!hasSlots) {
-      return i.location === selected.name || i.location.startsWith(`${selected.name} · `);
-    }
-    if (i.location === locationFor(selected, slot)) return true;
-    if (slot === 0 && i.location === selected.name) return true;
-    return false;
-  });
-  const candidates = activeItems.filter(i => !contents.some(c => c.id === i.id) && `${i.name} ${i.location}`.toLowerCase().includes(query.toLowerCase()));
+  const activeItems = useMemo(
+    () => items.filter((i) => i.status !== 'discarded' && i.status !== 'trading'),
+    [items]
+  );
+
+  // 현재 방(activeRoom)에 배정된 물건들
+  const currentRoomItems = useMemo(() => {
+    return activeItems.filter((item) => {
+      if (item.roomId) {
+        return item.roomId === activeRoom.id;
+      }
+      const rawLoc = (item.location || '').trim();
+      const furnName = rawLoc.includes(' · ') ? rawLoc.slice(0, rawLoc.indexOf(' · ')).trim() : rawLoc;
+      if (furnName && furnName !== '바닥 보관' && furnName !== '미분류') {
+        const found = rooms.find((r) => (r.furniture || []).some((f) => f.name === furnName));
+        if (found) return found.id === activeRoom.id;
+      }
+      return activeRoom.id === (rooms[0]?.id || 'room-1');
+    });
+  }, [activeItems, rooms, activeRoom.id]);
+
+  // 방에 배치한 물건 (이 방의 가구 또는 바닥에 보관 중인 물건)
+  const placed = useMemo(() => {
+    return currentRoomItems.filter((item) => {
+      const loc = (item.location || '').trim();
+      if (!loc || loc === '미분류' || loc === '선택 대기') return false;
+      if (loc === FLOOR_LOCATION) return true;
+      const furnName = loc.includes(' · ') ? loc.slice(0, loc.indexOf(' · ')).trim() : loc;
+      return furniture.some((f) => f.name === furnName);
+    });
+  }, [currentRoomItems, furniture]);
+
+  // 위치를 정할 물건 (어느 방이든 이미 가구/바닥에 배치된 물건은 제외, 이 방 소속이거나 미할당된 미배치 물건만 표시)
+  const unplacedItems = useMemo(() => {
+    return activeItems.filter((item) => {
+      const loc = (item.location || '').trim();
+      // 1. 이미 어떤 방이든 가구/바닥에 배치된 물건은 '위치를 정할 물건'에서 제외
+      if (loc && loc !== '미분류' && loc !== '선택 대기') {
+        if (loc === FLOOR_LOCATION) return false;
+        const furnName = loc.includes(' · ') ? loc.slice(0, loc.indexOf(' · ')).trim() : loc;
+        const isPlacedSomewhere = rooms.some((r) => (r.furniture || []).some((f) => f.name === furnName));
+        if (isPlacedSomewhere) return false;
+      }
+
+      // 2. 미배치된 물건 중 이 방 소속인지 확인
+      if (item.roomId) {
+        return item.roomId === activeRoom.id;
+      }
+
+      // roomId가 없는 미배치 물건은 기본 방(첫 번째 방)에서만 표시
+      return activeRoom.id === (rooms[0]?.id || 'room-1');
+    });
+  }, [activeItems, rooms, activeRoom.id]);
+
+  // 현재 선택된 가구/칸에 들어있는 물건 (이 방의 물건만 표시)
+  const contents = useMemo(() => {
+    if (!selected) return [];
+    return currentRoomItems.filter((i) => {
+      if (isFloor) return i.location === FLOOR_LOCATION;
+      if (!hasSlots) {
+        return i.location === selected.name || i.location.startsWith(`${selected.name} · `);
+      }
+      if (i.location === locationFor(selected, slot)) return true;
+      if (slot === 0 && i.location === selected.name) return true;
+      return false;
+    });
+  }, [selected, isFloor, hasSlots, currentRoomItems, slot]);
+
+  // 물건 추가 후보: 다른 방에 배치된 물건은 제외하고 검색
+  const candidates = useMemo(() => {
+    return activeItems.filter((i) => {
+      if (contents.some((c) => c.id === i.id)) return false;
+      const loc = (i.location || '').trim();
+      if (loc && loc !== '미분류' && loc !== '선택 대기') {
+        const furnName = loc.includes(' · ') ? loc.slice(0, loc.indexOf(' · ')).trim() : loc;
+        const placedInOtherRoom = rooms.some(
+          (r) => r.id !== activeRoom.id && (r.furniture || []).some((f) => f.name === furnName)
+        );
+        if (placedInOtherRoom) return false;
+        if (loc === FLOOR_LOCATION && i.roomId && i.roomId !== activeRoom.id) return false;
+      } else if (i.roomId && i.roomId !== activeRoom.id) {
+        return false;
+      }
+      return `${i.name} ${i.location || ''}`.toLowerCase().includes(query.toLowerCase());
+    });
+  }, [activeItems, contents, rooms, activeRoom.id, query]);
   useEffect(() => { setNameDraft(selected?.name || ''); }, [selected?.id, selected?.name]);
   useEffect(() => {
     const outsideItems = items.filter(item => item.location?.startsWith('현관 밖 신발장'));
@@ -226,7 +298,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     const oldLocations = Array.from({ length: slotCount(selected) }, (_, index) => slotName(selected, index));
     const renamed = { ...selected, name };
     const newLocations = Array.from({ length: slotCount(renamed) }, (_, index) => slotName(renamed, index));
-    updateMultipleItems(items.filter(item => oldLocations.includes(item.location)).map(item => ({ id: item.id, location: newLocations[oldLocations.indexOf(item.location)] })));
+    updateMultipleItems(currentRoomItems.filter(item => oldLocations.includes(item.location)).map(item => ({ id: item.id, location: newLocations[oldLocations.indexOf(item.location)], roomId: activeRoom.id })));
     setFurniture(prev => prev.map(f => f.id === selected.id ? { ...f, name } : f));
     setLayoutNotice('가구 이름과 연결된 보관 위치를 바꿨어요.');
   };
@@ -311,9 +383,9 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     if (current <= 0) return;
     const nextSlots = current - 1;
     const removedLocation = slotName(selected, nextSlots);
-    const affected = items.filter(i => i.location === removedLocation);
+    const affected = currentRoomItems.filter(i => i.location === removedLocation);
     if (affected.length > 0) {
-      updateMultipleItems(affected.map(i => ({ id: i.id, location: '미분류' })));
+      updateMultipleItems(affected.map(i => ({ id: i.id, location: '미분류', roomId: activeRoom.id })));
       setLayoutNotice(`${selected.name}의 마지막 칸을 삭제하고, 보관 중이던 물건 ${affected.length}개를 미분류로 이동했어요.`);
     } else {
       setLayoutNotice(`${selected.name}의 칸을 삭제했어요. (총 ${nextSlots}칸)`);
@@ -520,7 +592,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
   const handleDeleteClick = () => {
     if (!selected || selected.type === 'floorStorage') return;
     const targetLocations = [selected.name, ...Array.from({ length: slotCount(selected) }, (_, i) => slotName(selected, i))];
-    const furnitureItems = items.filter(i => targetLocations.includes(i.location));
+    const furnitureItems = currentRoomItems.filter(i => targetLocations.includes(i.location));
     if (furnitureItems.length === 0) {
       if (confirm(`'${selected.name}' 가구를 삭제하시겠습니까?`)) {
         const targetId = selected.id;
@@ -535,7 +607,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
   };
   const handleConfirmDeleteWithMoves = (moveMap) => {
     if (!deletingFurniture) return;
-    const updates = Object.entries(moveMap).map(([id, location]) => ({ id, location }));
+    const updates = Object.entries(moveMap).map(([id, location]) => ({ id, location, roomId: activeRoom.id }));
     if (updates.length > 0) {
       updateMultipleItems(updates);
     }
@@ -561,7 +633,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
   const handleBatchRemove = () => {
     if (selectedItemIds.length === 0) return;
     if (confirm(`선택한 ${selectedItemIds.length}개 물건을 이 가구에서 뺄까요? (미분류로 이동)`)) {
-      updateMultipleItems(selectedItemIds.map(id => ({ id, location: '미분류' })));
+      updateMultipleItems(selectedItemIds.map(id => ({ id, location: '미분류', roomId: activeRoom.id })));
       setLayoutNotice(`${selectedItemIds.length}개 물건을 미분류로 뺐어요.`);
       setSelectedItemIds([]);
       setIsItemSelectMode(false);
@@ -580,17 +652,18 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
         ...openPos,
         z: 0,
         rotated: false,
+        slots: newFurniture.slots || 1,
       };
 
       setFurniture(prev => [...prev, newFurnitureObj]);
-      updateMultipleItems(selectedItemIds.map(id => ({ id, location: targetLocation })));
+      updateMultipleItems(selectedItemIds.map(id => ({ id, location: targetLocation, roomId: activeRoom.id })));
 
       setEditing(true);
       setSelectedId(newId);
       setSelectedIds([newId]);
       setLayoutNotice(`'${newFurniture.name}'을(를) 원하는 위치에 배치해주세요.`);
     } else {
-      updateMultipleItems(selectedItemIds.map(id => ({ id, location: targetLocation })));
+      updateMultipleItems(selectedItemIds.map(id => ({ id, location: targetLocation, roomId: activeRoom.id })));
       setLayoutNotice(`${selectedItemIds.length}개 물건을 '${targetLocation}'(으)로 이동했어요.`);
     }
 
@@ -610,15 +683,16 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
         ...openPos,
         z: 0,
         rotated: false,
+        slots: newFurniture.slots || 1,
       };
       setFurniture(prev => [...prev, newFurnitureObj]);
-      updateMultipleItems(itemIds.map(id => ({ id, location: targetLocation })));
+      updateMultipleItems(itemIds.map(id => ({ id, location: targetLocation, roomId: activeRoom.id })));
       setEditing(true);
       setSelectedId(newId);
       setSelectedIds([newId]);
       setLayoutNotice(`'${newFurniture.name}'을(를) 원하는 위치에 배치해주세요.`);
     } else {
-      updateMultipleItems(itemIds.map(id => ({ id, location: targetLocation })));
+      updateMultipleItems(itemIds.map(id => ({ id, location: targetLocation, roomId: activeRoom.id })));
       setLayoutNotice(`${itemIds.length}개 물건을 '${targetLocation}'(으)로 배치했어요.`);
     }
   };
@@ -780,7 +854,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
           <polygon points={points([[0,0,0],[0,ROOM_SIZE,0],[0,ROOM_SIZE,3.8],[0,0,3.8]])} fill="#f3ece3" />
           <polygon points={points([[0,0,0],[ROOM_SIZE,0,0],[ROOM_SIZE,ROOM_SIZE,0],[0,ROOM_SIZE,0]])} fill="#e6cfb3" stroke="#cfae89" strokeWidth="2" />
           {Array.from({length: ROOM_SIZE - 1}, (_, i) => <line key={i} x1={point(i+1,0)[0]} y1={point(i+1,0)[1]} x2={point(i+1,ROOM_SIZE)[0]} y2={point(i+1,ROOM_SIZE)[1]} stroke="#d8bd9d" opacity=".7" />)}
-          <g tabIndex="0" role="button" aria-label={`바닥 보관, 물건 ${activeItems.filter(item => item.location === FLOOR_LOCATION).length}개`} aria-pressed={selectedId === FLOOR_STORAGE.id} className="room-floor-storage" onClick={() => select(FLOOR_STORAGE)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(FLOOR_STORAGE); } }}>
+          <g tabIndex="0" role="button" aria-label={`바닥 보관, 물건 ${currentRoomItems.filter(item => item.location === FLOOR_LOCATION).length}개`} aria-pressed={selectedId === FLOOR_STORAGE.id} className="room-floor-storage" onClick={() => select(FLOOR_STORAGE)} onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(FLOOR_STORAGE); } }}>
             <polygon points={points([[4.1,4.2,.02],[7.9,4.2,.02],[7.9,7.8,.02],[4.1,7.8,.02]])} fill="#f5eee4" stroke={selectedId === FLOOR_STORAGE.id ? '#9c5754' : '#e0d3c4'} strokeWidth={selectedId === FLOOR_STORAGE.id ? 4 : 3} />
           </g>
           <DoorMarker door={door} selected={doorSelected} onSelect={() => { setSelectedId(DOOR_ID); setAdding(false); }} />
@@ -796,7 +870,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
             const inside = baseInside ? { ...rawInside, x: baseInside.x, y: baseInside.y } : rawInside;
             const size = baseInside ? dimensions(baseInside) : dimensions(inside);
             const type = configFor(inside);
-            const count = activeItems.filter(i => i.location === inside.name || (inside.type === 'floorStorage' && i.location === FLOOR_LOCATION) || Array.from({length:slotCount(inside)},(_,n)=>locationFor(inside,n)).includes(i.location) || i.location.startsWith(`${inside.name} · `)).length;
+            const count = currentRoomItems.filter(i => i.location === inside.name || (inside.type === 'floorStorage' && i.location === FLOOR_LOCATION) || Array.from({length:slotCount(inside)},(_,n)=>locationFor(inside,n)).includes(i.location) || i.location.startsWith(`${inside.name} · `)).length;
             const displaySize = { ...size, h: Math.min(1.35, Math.max(.45, size.h * .3)) };
             const stackZ = baseParent ? Math.min(1.35, Math.max(.45, dimensions(baseParent).h * .3)) : 0;
             const isSelected = selectedIds.includes(f.id);
@@ -830,7 +904,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
           <p className="room-muted">{selected.type === 'floorStorage' ? '바닥에 임시로 둔 물건을 모아볼 수 있어요.' : hasSlots ? '칸을 선택하면 보관한 물건이 보여요.' : '칸 구분 없이 가구에 보관 중인 물건이에요. 필요하면 칸을 추가할 수 있어요.'}</p>
           {hasSlots && <div className="room-slots">{Array.from({ length: slotCount(selected) }, (_, i) => {
             const slotLoc = locationFor(selected, i);
-            const countInSlot = activeItems.filter(item => item.location === slotLoc || (i === 0 && item.location === selected.name)).length;
+            const countInSlot = currentRoomItems.filter(item => item.location === slotLoc || (i === 0 && item.location === selected.name)).length;
             return <button key={i} className={slot === i ? 'selected' : ''} aria-pressed={slot === i} onClick={() => { setSlot(i); setAdding(false); }}><span>{isFloor ? '바닥 보관' : `${i + 1}번째 칸`}</span><b>{countInSlot}개</b></button>;
           })}</div>}
           {selectedConfig?.configurableSlots && (
@@ -926,7 +1000,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
             </div>
           )}
           <button className="room-button primary full" onClick={() => setAdding(!adding)}>{adding ? '물건 선택 닫기' : '+ 등록한 물건 넣기'}</button>
-          {adding && <div className="room-picker"><input aria-label="등록한 물건 검색" placeholder="물건 이름 또는 위치 검색" value={query} onChange={e => setQuery(e.target.value)} /><p className="room-muted">다른 위치의 물건은 여기로 이동해요.</p><ul className="room-item-list">{candidates.map(item => <li key={item.id}><span className="room-item-icon">{getCategoryIcon(item)}</span><div><b>{item.name}</b><small>{item.location}</small></div><button onClick={() => updateItem(item.id, { location: currentTargetLocation })}>넣기</button></li>)}</ul>{!candidates.length && <p className="room-muted">넣을 수 있는 물건이 없어요.</p>}</div>}
+          {adding && <div className="room-picker"><input aria-label="등록한 물건 검색" placeholder="물건 이름 또는 위치 검색" value={query} onChange={e => setQuery(e.target.value)} /><p className="room-muted">다른 위치의 물건은 여기로 이동해요.</p><ul className="room-item-list">{candidates.map(item => <li key={item.id}><span className="room-item-icon">{getCategoryIcon(item)}</span><div><b>{item.name}</b><small>{item.location}</small></div><button onClick={() => updateItem(item.id, { location: currentTargetLocation, roomId: activeRoom.id })}>넣기</button></li>)}</ul>{!candidates.length && <p className="room-muted">넣을 수 있는 물건이 없어요.</p>}</div>}
           <button className="room-scan-link" onClick={onScan}>새 물건 스캔하기 ↗</button>
         </>}
       </section>
@@ -934,7 +1008,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     {deletingFurniture && (
       <FurnitureDeleteModal
         furniture={deletingFurniture}
-        items={items.filter(i => [deletingFurniture.name, ...Array.from({ length: slotCount(deletingFurniture) }, (_, idx) => slotName(deletingFurniture, idx))].includes(i.location))}
+        items={currentRoomItems.filter(i => [deletingFurniture.name, ...Array.from({ length: slotCount(deletingFurniture) }, (_, idx) => slotName(deletingFurniture, idx))].includes(i.location))}
         otherFurniture={furniture.filter(f => f.id !== deletingFurniture.id)}
         onConfirm={handleConfirmDeleteWithMoves}
         onClose={() => setDeletingFurniture(null)}
@@ -953,6 +1027,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
       <UnplacedItemsModal
         unplacedItems={unplacedItems}
         roomFurniture={furniture}
+        roomName={activeRoom.name}
         onPlaceItems={handlePlaceUnplacedItems}
         onClose={() => setShowUnplacedModal(false)}
       />
@@ -960,7 +1035,8 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     {showPlacedModal && (
       <PlacedSummaryModal
         furniture={furniture}
-        activeItems={activeItems}
+        activeItems={currentRoomItems}
+        roomName={activeRoom.name}
         onSelectFurniture={handleSelectFurnitureFromSummary}
         onClose={() => setShowPlacedModal(false)}
       />
