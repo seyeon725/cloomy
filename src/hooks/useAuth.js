@@ -76,7 +76,7 @@ export function useAuth() {
 
   /** 기존 게스트 데이터를 새 사용자 키로 마이그레이션 */
   const migrateGuestData = useCallback((newUid) => {
-    const keysToMigrate = ['cloomy_items', 'cloomy_room'];
+    const keysToMigrate = ['cloomy_items', 'cloomy_rooms', 'cloomy_active_room_id', 'cloomy_room'];
     for (const key of keysToMigrate) {
       const guestData = localStorage.getItem(key);
       const userKey = `${key}_${newUid}`;

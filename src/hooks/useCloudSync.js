@@ -30,8 +30,31 @@ export function useCloudSync({ user, itemsHook, room }) {
         const cloudData = await getCloudData(userId);
         if (!isMounted) return;
 
-        const currentLocalItems = itemsHook.items || [];
-        const currentLocalRooms = room.rooms || [];
+        let currentLocalItems = itemsHook.items || [];
+        if (currentLocalItems.length === 0) {
+          try {
+            const rawUser = localStorage.getItem(`cloomy_items_${userId}`);
+            const rawGuest = localStorage.getItem('cloomy_items');
+            const fallback = rawUser ? JSON.parse(rawUser) : (rawGuest ? JSON.parse(rawGuest) : []);
+            if (Array.isArray(fallback) && fallback.length > 0) {
+              currentLocalItems = fallback;
+              itemsHook.setItems(fallback);
+            }
+          } catch {}
+        }
+
+        let currentLocalRooms = room.rooms || [];
+        if (!currentLocalRooms || currentLocalRooms.length <= 1) {
+          try {
+            const rawUser = localStorage.getItem(`cloomy_rooms_${userId}`);
+            const rawGuest = localStorage.getItem('cloomy_rooms');
+            const fallback = rawUser ? JSON.parse(rawUser) : (rawGuest ? JSON.parse(rawGuest) : null);
+            if (Array.isArray(fallback) && fallback.length > 0) {
+              currentLocalRooms = fallback;
+              room.setRooms(fallback);
+            }
+          } catch {}
+        }
         const currentActiveRoomId = room.activeRoomId;
 
         if (cloudData && Array.isArray(cloudData.items) && cloudData.items.length > 0) {
