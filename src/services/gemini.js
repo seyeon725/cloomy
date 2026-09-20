@@ -142,6 +142,10 @@ const chatSchema = {
             enum: ['rename', 'updateUsage', 'move', 'discard'],
             description: 'rename(이름변경), updateUsage(사용도), move(위치이동), discard(폐기/비우기)',
           },
+          targetId: {
+            type: Type.STRING,
+            description: '수정할 물건의 고유 ID (id 필드)',
+          },
           targetName: {
             type: Type.STRING,
             description: '수정할 기존 물건 이름 (목록의 물건 이름과 매칭)',
@@ -197,7 +201,32 @@ function generateLocalConsultantResponse(items, userMessage) {
     const rawNewName = renameMatch[2].trim();
     const matchedItem = items.find((i) => rawTarget.includes(i.name) || i.name.includes(rawTarget));
     if (matchedItem && rawNewName) {
-      actions.push({ type: 'rename', targetName: matchedItem.name, newName: rawNewName });
+      actions.push({ type: 'rename', targetId: matchedItem.id, targetName: matchedItem.name, newName: rawNewName });
+    }
+  }
+
+  // "사진 없는 물건 비우기" 감지
+  const isPhotoNoneDeclutter =
+    (msgLower.includes('사진') && (msgLower.includes('없는') || msgLower.includes('안') || msgLower.includes('등록 안') || msgLower.includes('등록안') || msgLower.includes('미등록'))) &&
+    (msgLower.includes('비움') || msgLower.includes('비워') || msgLower.includes('버려') || msgLower.includes('폐기') || msgLower.includes('정리'));
+
+  if (isPhotoNoneDeclutter) {
+    const noPhotoItems = items.filter((i) => (!i.imageUrl || i.imageUrl.length === 0) && i.status !== 'discarded');
+    if (noPhotoItems.length > 0) {
+      noPhotoItems.forEach((item) => {
+        actions.push({ type: 'discard', targetId: item.id, targetName: item.name });
+      });
+      return {
+        reply: `사진이 등록되지 않은 물건 ${noPhotoItems.length}개를 비움(폐기) 처리했어요! ✨`,
+        quickReplies: ['내 물건 보기 📋', '다른 물건 정리 🧹', '정리 완료 ✨'],
+        actions,
+      };
+    } else {
+      return {
+        reply: `사진이 없는 물건이 없거나 이미 모두 비움 처리되었습니다. 😊`,
+        quickReplies: ['자주 쓰는 물건 정리 ⭐', '미분류 물건 배치 📍', '정리 완료 ✨'],
+        actions: [],
+      };
     }
   }
 
@@ -240,11 +269,13 @@ function generateLocalConsultantResponse(items, userMessage) {
  */
 export async function chatWithAgent(items, chatHistory, userMessage) {
   const simplifiedItems = items.map((i) => ({
+    id: i.id,
     name: i.name,
     category: i.category,
     location: i.location || '미분류',
     usage: i.usage || 'frequent',
     status: i.status || 'active',
+    hasPhoto: Boolean(i.imageUrl && i.imageUrl.length > 0),
   }));
 
   const systemPrompt = `당신은 방 정리 앱 "CLOOMY"의 초간결 AI 정리 비서입니다.
@@ -257,11 +288,16 @@ export async function chatWithAgent(items, chatHistory, userMessage) {
    - 사용자가 타이핑하지 않고 버튼만 눌러서 바로 응답할 수 있도록 상황에 맞는 3~4개의 짧은 선택지를 반드시 만드세요.
    - 예시: ["자주 써요 ⭐", "3개월 안 썼어요 ⏳", "1년 넘게 안 씀 (버리기 🗑️)", "책상으로 이동 📍", "다음 물건 보기 ➡️"]
 3. [물건 목록 실시간 반영(actions)]:
-   - 사용자가 물건의 진짜 이름이나 별칭을 알려주면 type: "rename", targetName: "<기존이름>", newName: "<새이름>" 액션을 생성하세요.
-     (예: "연보라색 화장품 용기 스프레이는 하늘색 원통 토너야" -> targetName: "연보라색 화장품 용기 스프레이", newName: "하늘색 원통 토너")
+   - 각 액션 객체에는 targetId(물건의 고유 id)와 targetName(물건 이름)을 반드시 둘 다 지정하세요.
+   - 사용자가 물건의 진짜 이름이나 별칭을 알려주면 type: "rename", targetId: "<id>", targetName: "<기존이름>", newName: "<새이름>" 액션을 생성하세요.
    - 사용 빈도를 말하면 type: "updateUsage", usage: "frequent" | "unused_3m" | "unused_1y" 액션을 생성하세요.
    - 위치를 옮기자고 하면 type: "move", location: "<새위치>" 액션을 생성하세요.
    - 버리거나 안 쓴다고 하면 type: "discard" 액션을 생성하세요.
+4. [사진 등록 여부(hasPhoto) 및 비우기/정리 규칙 - 엄격 준수!]:
+   - hasPhoto 속성은 true(사진 등록됨), false(사진 미등록, 기본 아이콘 상태)입니다.
+   - 사용자가 "사진 없는 물건", "사진 안 등록된 물건", "사진 미등록 물건"을 비우거나(discard) 정리해달라고 하면, **반드시 hasPhoto === false 인 물건들만** 골라서 actions(type: 'discard')를 생성하세요.
+   - **사진이 등록된 물건(hasPhoto === true)은 절대로 비움(discard)이나 변경 대상에 포함시키지 마세요!**
+   - 만약 조건에 해당하는 물건이 여러 개라면, 해당 조건(hasPhoto === false)의 물건들을 모두 actions 배열에 담으세요.
 
 사용자의 현재 물건 목록:
 ${JSON.stringify(simplifiedItems, null, 2)}`;

@@ -58,15 +58,32 @@ export function useCloudSync({ user, itemsHook, room }) {
         }
         const currentActiveRoomId = room.activeRoomId;
 
-        // 물건 스마트 병합 함수: id 기준으로 중복 없이 합쳐서 물건 유실을 원천 방지!
-        const mergeItemsSafely = (listA, listB) => {
+        // 물건 스마트 병합 함수: id 기준으로 타임스탬프(updatedAt)를 비교하여 최신 변경사항 보존!
+        const mergeItemsSafely = (localList, cloudList) => {
           const map = new Map();
-          (listA || []).forEach((item) => {
+          // 1. 클라우드 아이템 기본 등록
+          (cloudList || []).forEach((item) => {
             if (item && item.id) map.set(item.id, item);
           });
-          (listB || []).forEach((item) => {
-            if (item && item.id && !map.has(item.id)) {
-              map.set(item.id, item);
+
+          // 2. 로컬 아이템 병합: 동일 id인 경우 타임스탬프 비교
+          (localList || []).forEach((localItem) => {
+            if (!localItem || !localItem.id) return;
+            if (!map.has(localItem.id)) {
+              map.set(localItem.id, localItem);
+            } else {
+              const cloudItem = map.get(localItem.id);
+              const localTime = localItem.updatedAt ? new Date(localItem.updatedAt).getTime() : 0;
+              const cloudTime = cloudItem.updatedAt ? new Date(cloudItem.updatedAt).getTime() : 0;
+
+              // 로컬이 더 최신이거나 타임스탬프가 동일한 경우 로컬 속성 우선
+              if (localTime >= cloudTime || localTime === 0) {
+                map.set(localItem.id, {
+                  ...cloudItem,
+                  ...localItem,
+                  imageUrl: localItem.imageUrl || cloudItem.imageUrl,
+                });
+              }
             }
           });
           return Array.from(map.values());
@@ -107,11 +124,23 @@ export function useCloudSync({ user, itemsHook, room }) {
           isApplyingRemoteRef.current = false;
         }, 400);
 
-        // 최신 마이그레이션이 발생했거나 클라우드보다 데이터가 많으면 클라우드로 즉시 업로드 반영!
+        // 최신 마이그레이션이 발생했거나 로컬 변경사항(상태/위치/사용도 변경)이 있으면 클라우드로 즉시 업로드 반영!
+        const hasLocalChanges = mergedItems.some((item) => {
+          const cloudItem = cloudItems.find((c) => c.id === item.id);
+          if (!cloudItem) return true;
+          return (
+            item.status !== cloudItem.status ||
+            item.location !== cloudItem.location ||
+            item.usage !== cloudItem.usage ||
+            item.name !== cloudItem.name
+          );
+        });
+
         const needsCloudUpdate =
           mergedItems.length > cloudItems.length ||
           mergedRooms.length > cloudRooms.length ||
-          hasAnbang;
+          hasAnbang ||
+          hasLocalChanges;
 
         if (needsCloudUpdate) {
           console.log(`[CloudSync] 통합된 최신 데이터(${mergedItems.length}개 물건, ${mergedRooms.length}개 방) 클라우드로 저장.`);
@@ -200,11 +229,7 @@ export function useCloudSync({ user, itemsHook, room }) {
     if (!hasLoadedInitialCloudRef.current) return;
     if (isApplyingRemoteRef.current) return;
 
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-
-    saveTimeoutRef.current = setTimeout(async () => {
+    const performSync = async () => {
       try {
         setSyncStatus('syncing');
         const now = Date.now();
@@ -229,12 +254,27 @@ export function useCloudSync({ user, itemsHook, room }) {
           setSyncStatus('error');
         }
       }
-    }, 1200);
+    };
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+    }
+
+    saveTimeoutRef.current = setTimeout(performSync, 800);
+
+    const handleBeforeUnload = () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        performSync();
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
 
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
+      window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [itemsHook.items, room.rooms, room.activeRoomId, userId, isGuest]);
 

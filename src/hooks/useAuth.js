@@ -22,8 +22,20 @@ const USER_KEY = 'cloomy_current_user';
  *   continueAsGuest()   – 게스트로 계속 사용
  */
 export function useAuth() {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(USER_KEY));
+      if (saved?.uid) return saved;
+    } catch {}
+    return isFirebaseConfigured ? null : GUEST_USER;
+  });
+  const [loading, setLoading] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(USER_KEY));
+      if (saved?.uid) return false;
+    } catch {}
+    return true;
+  });
 
   // Firebase Auth 상태 감시 (실 구성 시)
   useEffect(() => {

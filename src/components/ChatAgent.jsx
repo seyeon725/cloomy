@@ -2,83 +2,157 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { chatWithAgent } from '../services/gemini';
 import { USAGE_CONFIG } from '../hooks/useItems';
 
+const CHAT_STORAGE_KEY = 'cloomy_chat_messages';
+
 export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems, onClearDeclutterItems }) {
   const items = itemsHook?.items || itemsProp || [];
   const updateItem = itemsHook?.updateItem;
+  const updateMultipleItems = itemsHook?.updateMultipleItems;
 
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(() => {
+    try {
+      const saved = localStorage.getItem(CHAT_STORAGE_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isStarted, setIsStarted] = useState(false);
+  const [isStarted, setIsStarted] = useState(() => {
+    try {
+      const saved = localStorage.getItem(CHAT_STORAGE_KEY);
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) && parsed.length > 0;
+    } catch {
+      return false;
+    }
+  });
   const bottomRef = useRef(null);
+
+  // 메시지 로컬스토리지 보존 (새로고침 시 대화 및 결과 유지)
+  useEffect(() => {
+    try {
+      localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify(messages));
+    } catch {}
+  }, [messages]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isLoading]);
 
-  // AI가 지시한 실시간 물건 변경사항 실행
+  // AI가 지시한 실시간 물건 변경사항 실행 (원자적 일괄 업데이트 & 안전가드 탑재)
   const applyActions = useCallback(
-    (actions) => {
+    (actions, contextUserMsg = '') => {
       const applied = [];
-      if (!Array.isArray(actions) || !updateItem) return applied;
+      if (!Array.isArray(actions) || (!updateMultipleItems && !updateItem)) return applied;
+
+      // 사용자의 메시지에서 '사진 없는/안 등록된 물건' 요청 여부 감지
+      const msgLower = (contextUserMsg || '').toLowerCase();
+      const isUserAskingNoPhotoOnly =
+        msgLower.includes('사진') &&
+        (msgLower.includes('없는') ||
+          msgLower.includes('안') ||
+          msgLower.includes('등록 안') ||
+          msgLower.includes('등록안') ||
+          msgLower.includes('미등록'));
+
+      const itemUpdates = [];
 
       for (const act of actions) {
-        if (!act.targetName) continue;
-        const target = act.targetName.trim().toLowerCase();
+        if (!act.targetName && !act.targetId) continue;
+        const targetName = act.targetName ? act.targetName.trim().toLowerCase() : '';
 
-        // 이름 매칭 (정확 일치 -> 부분 일치 순)
-        let matched = items.find((i) => i.name.trim().toLowerCase() === target);
-        if (!matched) {
+        // targetId 우선, 그 후 이름 매칭 (정확 일치 -> 부분 일치 순)
+        let matched = act.targetId ? items.find((i) => i.id === act.targetId) : null;
+        if (!matched && targetName) {
+          matched = items.find((i) => i.name.trim().toLowerCase() === targetName);
+        }
+        if (!matched && targetName) {
           matched = items.find((i) => {
             const n = i.name.trim().toLowerCase();
-            return n.includes(target) || target.includes(n);
+            return n.includes(targetName) || targetName.includes(n);
           });
         }
 
         if (matched) {
+          // [이중 안전장치]: 사용자가 사진 없는 물건 비우기를 요청했는데 AI가 사진 있는 물건을 discard 대상으로 보낸 경우 철저히 제외
+          if (isUserAskingNoPhotoOnly && act.type === 'discard' && Boolean(matched.imageUrl && matched.imageUrl.length > 0)) {
+            console.warn(`[ChatAgent] 안전 가드: 사진이 등록된 '${matched.name}'은(는) 비움 대상에서 보호되었습니다.`);
+            continue;
+          }
+
+          const now = new Date().toISOString();
+          const updates = { id: matched.id, updatedAt: now };
+          let appliedDesc = null;
+
           if (act.type === 'rename' && act.newName && matched.name !== act.newName) {
-            updateItem(matched.id, { name: act.newName });
-            applied.push({
+            updates.name = act.newName;
+            appliedDesc = {
               emoji: '✏️',
               desc: `'${matched.name}' ➔ '${act.newName}'`,
-            });
+            };
           } else if (act.type === 'updateUsage' && act.usage) {
             const cfg = USAGE_CONFIG[act.usage];
-            updateItem(matched.id, { usage: act.usage });
-            applied.push({
+            updates.usage = act.usage;
+            appliedDesc = {
               emoji: cfg?.emoji || '⏱️',
               desc: `'${matched.name}' 사용도: ${cfg?.shortLabel || act.usage}`,
-            });
+            };
           } else if (act.type === 'move' && act.location) {
-            updateItem(matched.id, { location: act.location });
-            applied.push({
+            updates.location = act.location;
+            appliedDesc = {
               emoji: '📍',
               desc: `'${matched.name}' ➔ '${act.location}'`,
-            });
+            };
           } else if (act.type === 'discard') {
-            updateItem(matched.id, { status: 'discarded' });
-            applied.push({
+            updates.status = 'discarded';
+            appliedDesc = {
               emoji: '🗑️',
-              desc: `'${matched.name}' 폐기 처리`,
-            });
+              desc: `'${matched.name}' 비우기(폐기) 처리`,
+            };
+          }
+
+          if (appliedDesc) {
+            itemUpdates.push(updates);
+            applied.push(appliedDesc);
           }
         }
       }
+
+      if (itemUpdates.length > 0) {
+        if (updateMultipleItems) {
+          updateMultipleItems(itemUpdates);
+        } else if (updateItem) {
+          itemUpdates.forEach((u) => {
+            const { id, ...rest } = u;
+            updateItem(id, rest);
+          });
+        }
+      }
+
       return applied;
     },
-    [items, updateItem]
+    [items, updateMultipleItems, updateItem]
   );
+
+  const handleResetChat = useCallback(() => {
+    localStorage.removeItem(CHAT_STORAGE_KEY);
+    setMessages([]);
+    setIsStarted(false);
+  }, []);
 
   const startChat = useCallback(async () => {
     setIsStarted(true);
     setIsLoading(true);
+    const startPrompt = '정리 시작! 1문장으로 가볍게 인사하고 어떤 물건부터 정리할지 물어봐줘.';
     try {
       const result = await chatWithAgent(
         items,
         [],
-        '정리 시작! 1문장으로 가볍게 인사하고 어떤 물건부터 정리할지 물어봐줘.'
+        startPrompt
       );
-      const applied = applyActions(result.actions);
+      const applied = applyActions(result.actions, startPrompt);
       setMessages([
         { role: 'user', text: '정리 도와줘! 🙋' },
         {
@@ -119,7 +193,7 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
           [initialUserMsg],
           `사용자가 정리할 물건으로 ${names} 총 ${selectedList.length}개를 선택했어. 1~2문장으로 아주 짧고 친절하게 인사하고, 이 물건들을 어떻게 정리할지 물어봐줘.`
         );
-        const applied = applyActions(result.actions);
+        const applied = applyActions(result.actions, userMsgText);
         setMessages([
           initialUserMsg,
           {
@@ -170,7 +244,7 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
 
       try {
         const result = await chatWithAgent(items, newMessages, userMsg);
-        const applied = applyActions(result.actions);
+        const applied = applyActions(result.actions, userMsg);
 
         setMessages((prev) => [
           ...prev,
@@ -242,6 +316,21 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
 
   return (
     <div className="flex flex-col h-[calc(100dvh-13rem)] bg-white rounded-[32px] shadow-[0_12px_36px_rgba(74,62,61,0.08)] border border-[#F2ECE6] overflow-hidden w-full">
+      {/* Top Action Bar */}
+      <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-[#F2ECE6] text-xs">
+        <span className="font-bold text-[#806F6D] flex items-center gap-1.5">
+          <span>🧹</span> <span>AI 실시간 정리</span>
+        </span>
+        <button
+          type="button"
+          onClick={handleResetChat}
+          className="px-2.5 py-1 rounded-full font-bold text-[#A66E22] bg-[#FFF5D9] hover:bg-[#FFE9BE] transition-colors flex items-center gap-1 cursor-pointer"
+          title="대화 내역을 비우고 처음부터 다시 시작합니다."
+        >
+          <span>🔄</span> <span>대화 새로 시작</span>
+        </button>
+      </div>
+
       {/* Messages Scroll Area */}
       <div className="flex-1 overflow-y-auto space-y-4 p-4 sm:p-6 bg-[#FAF8F5]">
         {messages.map((msg, i) => (

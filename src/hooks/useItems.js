@@ -14,30 +14,52 @@ function storageKey(userId) {
 
 function loadItems(userId) {
   const allFound = [];
-  const idSet = new Set();
+  const idMap = new Map();
 
-  const addParsed = (parsed) => {
+  const addParsed = (parsed, isPrimary = false) => {
     if (Array.isArray(parsed)) {
       parsed.forEach((item) => {
-        if (item && item.id && !idSet.has(item.id)) {
-          idSet.add(item.id);
+        if (!item || !item.id) return;
+        if (!idMap.has(item.id)) {
+          idMap.set(item.id, item);
           allFound.push(item);
+        } else if (isPrimary) {
+          // 최우선 키(현재 사용자 데이터)는 무조건 우선 적용
+          const existingIdx = allFound.findIndex((i) => i.id === item.id);
+          if (existingIdx !== -1) {
+            allFound[existingIdx] = item;
+          }
+          idMap.set(item.id, item);
+        } else {
+          // 보조 키와의 병합 시 updatedAt이 더 최신인 경우만 업데이트
+          const existing = idMap.get(item.id);
+          const existingTime = existing?.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
+          const incomingTime = item?.updatedAt ? new Date(item.updatedAt).getTime() : 0;
+          if (incomingTime > existingTime && incomingTime > 0) {
+            const existingIdx = allFound.findIndex((i) => i.id === item.id);
+            if (existingIdx !== -1) {
+              allFound[existingIdx] = item;
+            }
+            idMap.set(item.id, item);
+          }
         }
       });
     }
   };
 
   try {
-    // 1. 현재 사용자 키
+    // 1. 현재 사용자 키 (최우선 순위)
     const userKey = storageKey(userId);
     const userData = localStorage.getItem(userKey);
-    if (userData) addParsed(JSON.parse(userData));
+    if (userData) addParsed(JSON.parse(userData), true);
 
-    // 2. 게스트 키 (게스트 상태에서 등록했던 42개 물건 누락 방지 및 자동 복원)
-    const guestData = localStorage.getItem(BASE_KEY);
-    if (guestData) addParsed(JSON.parse(guestData));
+    // 2. 게스트 키 (게스트 상태에서 등록했던 물건 누락 방지 및 마이그레이션)
+    if (userKey !== BASE_KEY) {
+      const guestData = localStorage.getItem(BASE_KEY);
+      if (guestData) addParsed(JSON.parse(guestData), false);
+    }
 
-    // 3. 브라우저 내 다른 모든 cloomy_items_* 키 탐색하여 누락된 물건 모두 복원
+    // 3. 브라우저 내 다른 모든 cloomy_items_* 키 탐색하여 누락된 물건 복원
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
       if (
@@ -48,12 +70,13 @@ function loadItems(userId) {
       ) {
         try {
           const raw = localStorage.getItem(k);
-          if (raw) addParsed(JSON.parse(raw));
+          if (raw) addParsed(JSON.parse(raw), false);
         } catch {}
       }
     }
-
-  } catch {}
+  } catch (err) {
+    console.warn('[useItems] loadItems 로드 중 에러:', err);
+  }
 
   return allFound;
 }
@@ -130,43 +153,67 @@ export function useItems(userId) {
   }, [items, userId]);
 
   const addItems = useCallback((newItems, location) => {
+    const now = new Date().toISOString();
     const itemsWithMeta = newItems.map((item) => ({
       ...item,
       id: uuidv4(),
       location: location || '미분류',
       status: 'active',
-      createdAt: new Date().toISOString(),
+      createdAt: now,
+      updatedAt: now,
       lastUsedAt: null,
       usage: item.usage || 'frequent',
     }));
-    setItems((prev) => [...itemsWithMeta, ...prev]);
+    setItems((prev) => {
+      const next = [...itemsWithMeta, ...prev];
+      saveItems(next, userId);
+      return next;
+    });
     return itemsWithMeta;
-  }, []);
+  }, [userId]);
 
   const updateItem = useCallback((id, updates) => {
-    setItems((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
-    );
-  }, []);
+    const now = new Date().toISOString();
+    setItems((prev) => {
+      const next = prev.map((item) =>
+        item.id === id ? { ...item, ...updates, updatedAt: updates.updatedAt || now } : item
+      );
+      saveItems(next, userId);
+      return next;
+    });
+  }, [userId]);
 
   const updateMultipleItems = useCallback((updatedItemsList) => {
-    const updateMap = new Map(updatedItemsList.map((u) => [u.id, u]));
-    setItems((prev) =>
-      prev.map((item) => {
+    const now = new Date().toISOString();
+    const updateMap = new Map(
+      updatedItemsList.map((u) => [u.id, { ...u, updatedAt: u.updatedAt || now }])
+    );
+    setItems((prev) => {
+      const next = prev.map((item) => {
         const updates = updateMap.get(item.id);
         return updates ? { ...item, ...updates } : item;
-      })
-    );
-  }, []);
+      });
+      saveItems(next, userId);
+      return next;
+    });
+  }, [userId]);
 
   const removeItem = useCallback((id) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
-  }, []);
+    setItems((prev) => {
+      const next = prev.filter((item) => item.id !== id);
+      saveItems(next, userId);
+      return next;
+    });
+  }, [userId]);
 
   const removeMultipleItems = useCallback((ids) => {
     const idSet = new Set(ids);
-    setItems((prev) => prev.filter((item) => !idSet.has(item.id)));
-  }, []);
+    setItems((prev) => {
+      const next = prev.filter((item) => !idSet.has(item.id));
+      saveItems(next, userId);
+      return next;
+    });
+  }, [userId]);
 
   const getItemsByLocation = useCallback(
     (location) => items.filter((item) => item.location === location),
