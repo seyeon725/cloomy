@@ -4,7 +4,7 @@ import FurnitureDeleteModal from '../components/FurnitureDeleteModal';
 import MoveItemsModal from '../components/MoveItemsModal';
 import UnplacedItemsModal from '../components/UnplacedItemsModal';
 import PlacedSummaryModal from '../components/PlacedSummaryModal';
-import { FlaticonEdit, FlaticonCheck } from '../components/Icon';
+import { FlaticonGear, FlaticonCheck } from '../components/Icon';
 import './RoomPage.css';
 
 const point = (x, y, z = 0) => [350 + (x - y) * 29, 148 + (x + y) * 15 - z * 34];
@@ -839,35 +839,37 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
         );
       })}
 
-      {/* + 방 추가 버튼 */}
-      <button
-        type="button"
-        onClick={() => {
-          setNewRoomName('');
-          setShowAddRoomModal(true);
-        }}
-        className="px-3.5 py-2 rounded-2xl text-xs sm:text-sm font-extrabold text-[#B56562] bg-[#FFF0EE] hover:bg-[#FFE5E0] border border-[#FFD5CF] flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer active:scale-95 shadow-xs shrink-0"
-      >
-        <span>+</span>
-        <span>방 추가</span>
-      </button>
+      {/* 편집 모드일 때만 나타나는 + 방 추가 버튼 */}
+      {isRoomEditMode && (
+        <button
+          type="button"
+          onClick={() => {
+            setNewRoomName('');
+            setShowAddRoomModal(true);
+          }}
+          className="px-3.5 py-2 rounded-2xl text-xs sm:text-sm font-extrabold text-[#B56562] bg-[#FFF0EE] hover:bg-[#FFE5E0] border border-[#FFD5CF] flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer active:scale-95 shadow-xs shrink-0"
+        >
+          <span>+</span>
+          <span>방 추가</span>
+        </button>
+      )}
 
-      {/* 방 편집 토글 버튼 (아이콘 전용) */}
+      {/* 4번 톱니바퀴 / 완료 토글 버튼 */}
       <button
         type="button"
         onClick={() => setIsRoomEditMode(!isRoomEditMode)}
         className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-xs shrink-0 ${
           isRoomEditMode
             ? 'bg-[#B56562] text-white shadow-sm'
-            : 'bg-white text-[#705E5B] hover:bg-[#FFF2F0] border border-[#EFE8E3]'
+            : 'bg-white text-[#705E5B] hover:bg-[#FFF2F0] hover:text-[#B56562] border border-[#EFE8E3]'
         }`}
-        title={isRoomEditMode ? '편집 완료' : '방 편집'}
-        aria-label={isRoomEditMode ? '편집 완료' : '방 편집'}
+        title={isRoomEditMode ? '설정 완료' : '방 관리 및 편집'}
+        aria-label={isRoomEditMode ? '설정 완료' : '방 관리 및 편집'}
       >
         {isRoomEditMode ? (
           <FlaticonCheck size={18} className="text-white" />
         ) : (
-          <FlaticonEdit size={19} />
+          <FlaticonGear size={17} />
         )}
       </button>
     </div>
