@@ -286,16 +286,6 @@ export default function App() {
               fillOpacity={0.45}
               className={isSyncing ? 'animate-pulse' : ''}
             />
-            {/* 상태 뱃지 점 */}
-            <span
-              className={`absolute top-1 right-1 w-2 h-2 rounded-full ring-2 ring-white ${
-                isCloudConnected
-                  ? 'bg-[#22C55E]'
-                  : isSyncing
-                  ? 'bg-[#F59E0B] animate-ping'
-                  : 'bg-[#E5484D]'
-              }`}
-            />
           </button>
 
           {/* 사용자 프로필 / 로그인 버튼 */}

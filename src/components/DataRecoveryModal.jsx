@@ -1,6 +1,4 @@
 import { useState, useEffect, useRef } from 'react';
-import { PRELOADED_RECOVERY_DATA } from '../data/recoveryBackup';
-import { saveCloudData } from '../services/cloudSync';
 import Icon from './Icon';
 
 export default function DataRecoveryModal({
@@ -17,10 +15,10 @@ export default function DataRecoveryModal({
   const [message, setMessage] = useState('');
   const [copiedRule, setCopiedRule] = useState(false);
   const [showRuleGuide, setShowRuleGuide] = useState(syncStatus === 'permission_denied');
-  const [showRestoreDetails, setShowRestoreDetails] = useState(false);
   const fileInputRef = useRef(null);
 
   const isLoggedIn = user && !user.isGuest;
+  const isCloudConnected = Boolean(isLoggedIn && syncStatus === 'synced');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -31,48 +29,6 @@ export default function DataRecoveryModal({
   }, [isOpen, syncStatus]);
 
   if (!isOpen) return null;
-
-  const handleRestorePreloaded = async () => {
-    try {
-      if (itemsHook?.setItems) {
-        itemsHook.setItems(PRELOADED_RECOVERY_DATA.items);
-      }
-      if (room?.setRooms) {
-        room.setRooms(PRELOADED_RECOVERY_DATA.rooms);
-      }
-      if (room?.setActiveRoomId) {
-        room.setActiveRoomId(PRELOADED_RECOVERY_DATA.activeRoomId);
-      }
-
-      const userKey = isLoggedIn ? `cloomy_items_${user.uid}` : 'cloomy_items';
-      const userRoomKey = isLoggedIn ? `cloomy_rooms_${user.uid}` : 'cloomy_rooms';
-      const activeKey = isLoggedIn ? `cloomy_active_room_id_${user.uid}` : 'cloomy_active_room_id';
-
-      try {
-        localStorage.setItem(userKey, JSON.stringify(PRELOADED_RECOVERY_DATA.items));
-        localStorage.setItem('cloomy_items', JSON.stringify(PRELOADED_RECOVERY_DATA.items));
-        localStorage.setItem(userRoomKey, JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
-        localStorage.setItem('cloomy_rooms', JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
-        localStorage.setItem(activeKey, PRELOADED_RECOVERY_DATA.activeRoomId);
-        localStorage.setItem('cloomy_active_room_id', PRELOADED_RECOVERY_DATA.activeRoomId);
-      } catch (storageErr) {
-        console.warn('localStorage 저장 경고:', storageErr);
-      }
-
-      if (isLoggedIn) {
-        saveCloudData(user.uid, PRELOADED_RECOVERY_DATA).catch((cloudErr) => {
-          console.warn('클라우드 저장 대기:', cloudErr);
-        });
-      }
-
-      setMessage(
-        `전체 물건 ${PRELOADED_RECOVERY_DATA.items.length}개와 방 2개('내 방' 12개 가구, '거실')가 완벽히 복원되었습니다! 🎉`
-      );
-    } catch (e) {
-      console.error('복원 에러 상세:', e);
-      setMessage(`복원 중 오류가 발생했습니다: ${e?.message || e}`);
-    }
-  };
 
   const firestoreRuleText = `rules_version = '2';
 service cloud.firestore {
@@ -220,8 +176,6 @@ service cloud.firestore {
     setMessage('새로운 시작을 위해 데이터가 깨끗하게 초기화되었습니다.');
   };
 
-  const isCloudConnected = Boolean(isLoggedIn && syncStatus === 'synced');
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs px-4"
@@ -279,21 +233,27 @@ service cloud.firestore {
             <h4 className="text-xs font-extrabold text-[#8F5E4D] uppercase tracking-wider flex items-center gap-1.5">
               <span>☁️</span> 실시간 클라우드 연동
             </h4>
-            {isLoggedIn && (
+            {isLoggedIn ? (
               <span
                 className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                  syncStatus === 'permission_denied'
-                    ? 'bg-[#FFF0EE] text-[#E5484D] border border-[#FFD5CF]'
+                  isCloudConnected
+                    ? 'bg-[#EAF5EC] text-[#3D7C4F]'
                     : syncStatus === 'syncing'
                     ? 'bg-[#FFF0E5] text-[#D97706]'
-                    : 'bg-[#EAF5EC] text-[#3D7C4F]'
+                    : 'bg-[#FFF0EE] text-[#E5484D] border border-[#FFD5CF]'
                 }`}
               >
-                {syncStatus === 'permission_denied'
-                  ? '⚠️ 규칙 설정 필요'
+                {isCloudConnected
+                  ? '연동 완료'
                   : syncStatus === 'syncing'
                   ? '동기화 중...'
-                  : '연동 완료'}
+                  : syncStatus === 'permission_denied'
+                  ? '⚠️ 규칙 설정 필요'
+                  : '⚠️ 동기화 실패'}
+              </span>
+            ) : (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FFF0EE] text-[#E5484D]">
+                미연동 (게스트)
               </span>
             )}
           </div>
@@ -391,21 +351,6 @@ service cloud.firestore {
               </button>
             </div>
           )}
-
-          {/* 구름 아이콘 색상 설명 뱃지 */}
-          <div
-            className={`mt-3 p-2.5 rounded-xl border text-[11px] leading-relaxed flex items-center gap-2 ${
-              isCloudConnected
-                ? 'bg-[#EAF5EC] border-[#C8E6C9] text-[#2E7D32]'
-                : 'bg-[#FFF0EE] border-[#FFCCD2] text-[#C93B3E]'
-            }`}
-          >
-            <span className="text-sm">{isCloudConnected ? '🟢' : '🔴'}</span>
-            <span>
-              상단 구름 아이콘:{' '}
-              <strong>{isCloudConnected ? '연두빛 (실시간 연동 활성)' : '빨간빛 (미연동/로컬 보관)'}</strong>
-            </span>
-          </div>
         </div>
 
         {/* 2. 데이터 백업 및 복원 (JSON) */}
@@ -473,47 +418,7 @@ service cloud.firestore {
           </div>
         </div>
 
-        {/* 3. 이전 작업 데이터 복원 (필요 시 복구 옵션) */}
-        <div className="mb-4 p-3.5 rounded-2xl bg-[#FFF8F0] border border-[#FFE8D6]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-base">✨</span>
-              <div>
-                <h4 className="text-xs font-bold text-[#8A5D4D]">
-                  이전 작업 데이터 복원 도구
-                </h4>
-                <p className="text-[10px] text-[#A67D6E]">
-                  이전에 작업하던 전체 65개 물건 및 2개 방 배치를 불러옵니다.
-                </p>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowRestoreDetails((prev) => !prev)}
-              className="text-[11px] font-bold text-[#B56562] cursor-pointer"
-            >
-              {showRestoreDetails ? '닫기 ▲' : '열기 ▼'}
-            </button>
-          </div>
-
-          {showRestoreDetails && (
-            <div className="mt-3 pt-3 border-t border-[#FFE2CC] space-y-2">
-              <p className="text-[11px] text-[#705E5B] leading-relaxed">
-                이전에 작업하셨던 <strong>물건 65개</strong>와 <strong>방 2개('내 방' 12개 가구, '거실')</strong>를 한 번의 클릭으로 현재 브라우저에 불러올 수 있습니다.
-              </p>
-              <button
-                type="button"
-                onClick={handleRestorePreloaded}
-                className="w-full py-2.5 rounded-xl bg-[#B56562] hover:bg-[#9E4E4B] text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center justify-center gap-1.5"
-              >
-                <span>✨</span>
-                <span>이전 데이터(65개 물건 + 2개 방) 지금 불러오기</span>
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* 4. 초기화 및 브라우저 상태 */}
+        {/* 3. 초기화 및 브라우저 상태 */}
         <div className="flex items-center justify-between pt-2 text-[11px] text-[#9A8784]">
           <span>현재 등록: 물건 {itemsHook.items.length}개 / 방 {room.rooms.length}개</span>
           <button

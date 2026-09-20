@@ -111,9 +111,7 @@ export function useCloudSync({ user, itemsHook, room }) {
         const needsCloudUpdate =
           mergedItems.length > cloudItems.length ||
           mergedRooms.length > cloudRooms.length ||
-          hasAnbang ||
-          missingLivingRoom ||
-          isOldLayout;
+          hasAnbang;
 
         if (needsCloudUpdate) {
           console.log(`[CloudSync] 통합된 최신 데이터(${mergedItems.length}개 물건, ${mergedRooms.length}개 방) 클라우드로 저장.`);
@@ -131,7 +129,13 @@ export function useCloudSync({ user, itemsHook, room }) {
         setSyncStatus('synced');
       } catch (err) {
         if (!isMounted) return;
-        if (err.code === 'permission-denied') {
+        const isPermission =
+          err?.code === 'permission-denied' ||
+          err?.code === 'firestore/permission-denied' ||
+          err?.message?.includes('permission') ||
+          err?.message?.includes('Missing or insufficient permissions');
+
+        if (isPermission) {
           console.error('[CloudSync] Firestore 보안 규칙으로 인해 클라우드 접근이 거부되었습니다.');
           setSyncStatus('permission_denied');
           setSyncMessage('Firebase Firestore 보안 규칙 설정이 필요합니다.');
@@ -212,7 +216,13 @@ export function useCloudSync({ user, itemsHook, room }) {
         });
         setSyncStatus('synced');
       } catch (err) {
-        if (err.code === 'permission-denied') {
+        const isPermission =
+          err?.code === 'permission-denied' ||
+          err?.code === 'firestore/permission-denied' ||
+          err?.message?.includes('permission') ||
+          err?.message?.includes('Missing or insufficient permissions');
+
+        if (isPermission) {
           setSyncStatus('permission_denied');
           setSyncMessage('Firebase Firestore 보안 규칙 설정이 필요합니다.');
         } else {
