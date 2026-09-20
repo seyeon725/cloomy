@@ -3,6 +3,7 @@ import ItemCard from './ItemCard';
 import MoveItemsModal from './MoveItemsModal';
 import Icon from './Icon';
 import { USAGE_CONFIG } from '../hooks/useItems';
+import { slotCount, slotName, FLOOR_LOCATION } from '../hooks/useRoom';
 
 const categoryEmojis = { 책: '📚', 의류: '👕', 전자기기: '📱', 식기: '🍽️', 문구: '✏️', 화장품: '💄', 장식품: '🎨', 식품: '🍎', 잡화: '📦', 기타: '🔹' };
 const statusOptions = [
@@ -193,25 +194,55 @@ export default function Dashboard({
 
   const furnitureGroups = useMemo(() => {
     const furnMap = new Map();
-    const getIcon = (furnName) => {
-      if (furnName === '바닥 보관') return '🧺';
-      if (furnName === '미분류') return '📍';
-      const f = currentRoomFurniture.find((rf) => rf.name === furnName);
+    const getIcon = (furnOrName) => {
+      const name = typeof furnOrName === 'string' ? furnOrName : furnOrName?.name;
+      if (name === '바닥 보관') return '🧺';
+      if (name === '미분류') return '📍';
+      const f = typeof furnOrName === 'object' && furnOrName?.type ? furnOrName : currentRoomFurniture.find((rf) => rf.name === name);
       if (f && f.type) {
         const icons = { drawers: '🗄️', shelf: '📚', desk: '🖥️', bed: '🛏️', wardrobe: '👗', organizer: '📦' };
         return icons[f.type] || '🗄️';
       }
-      return '🏠';
+      return '🗄️';
     };
 
+    // 1. 내 방 탭에 실제로 존재하는 가구들만 등록 (절대 가구 목록에 없는 위치 문자열로 임의 생성하지 않음)
     for (const f of currentRoomFurniture) {
-      furnMap.set(f.name, { id: f.id, name: f.name, icon: getIcon(f.name), totalCount: 0, slots: new Map() });
+      const slotsMap = new Map();
+      const numSlots = slotCount(f);
+      for (let i = 0; i < numSlots; i++) {
+        const fullLoc = slotName(f, i);
+        slotsMap.set(fullLoc, {
+          fullLocation: fullLoc,
+          label: `${i + 1}번째 칸`,
+          count: 0,
+        });
+      }
+      furnMap.set(f.name, {
+        id: f.id,
+        name: f.name,
+        icon: getIcon(f),
+        totalCount: 0,
+        slots: slotsMap,
+        hasSlots: numSlots > 0,
+      });
     }
 
     const roomItems = items.filter(isItemInSelectedRoom);
+    let floorCount = 0;
+    let unclassifiedCount = 0;
 
     for (const item of roomItems) {
       const rawLoc = (item.location || '미분류').trim();
+      if (rawLoc === FLOOR_LOCATION) {
+        floorCount++;
+        continue;
+      }
+      if (rawLoc === '미분류' || rawLoc === '선택 대기') {
+        unclassifiedCount++;
+        continue;
+      }
+
       let furnName = rawLoc;
       let slotPart = null;
       if (rawLoc.includes(' · ')) {
@@ -219,26 +250,56 @@ export default function Dashboard({
         furnName = rawLoc.slice(0, idx).trim();
         slotPart = rawLoc.slice(idx + 3).trim();
       }
-      if (!furnMap.has(furnName)) {
-        furnMap.set(furnName, { id: furnName, name: furnName, icon: getIcon(furnName), totalCount: 0, slots: new Map() });
-      }
-      const g = furnMap.get(furnName);
-      g.totalCount++;
-      if (slotPart) {
-        const sObj = g.slots.get(rawLoc) || { fullLocation: rawLoc, label: slotPart, count: 0 };
-        sObj.count++;
-        g.slots.set(rawLoc, sObj);
+
+      if (furnMap.has(furnName)) {
+        const g = furnMap.get(furnName);
+        g.totalCount++;
+        if (slotPart) {
+          const sObj = g.slots.get(rawLoc) || { fullLocation: rawLoc, label: slotPart, count: 0 };
+          sObj.count++;
+          g.slots.set(rawLoc, sObj);
+        }
+      } else {
+        // 현재 방의 가구 목록에 없는 위치에 있는 물건은 '미분류'로 집계
+        unclassifiedCount++;
       }
     }
 
+    // 바닥 보관에 물건이 있는 경우
+    if (floorCount > 0) {
+      furnMap.set(FLOOR_LOCATION, {
+        id: 'floor-storage',
+        name: FLOOR_LOCATION,
+        icon: '🧺',
+        totalCount: floorCount,
+        slots: new Map(),
+        hasSlots: false,
+      });
+    }
+
+    // 미분류 물건이 있는 경우
+    if (unclassifiedCount > 0) {
+      furnMap.set('미분류', {
+        id: 'unclassified',
+        name: '미분류',
+        icon: '📍',
+        totalCount: unclassifiedCount,
+        slots: new Map(),
+        hasSlots: false,
+      });
+    }
+
     return Array.from(furnMap.values())
-      .filter((g) => g.totalCount > 0)
+      .filter((g) => g.totalCount > 0 || currentRoomFurniture.some((f) => f.name === g.name))
       .map((g) => ({
         ...g,
         hasSlots: g.slots.size > 0,
         slots: Array.from(g.slots.values()).sort((a, b) => a.label.localeCompare(b.label, 'ko', { numeric: true })),
       }))
-      .sort((a, b) => b.totalCount - a.totalCount);
+      .sort((a, b) => {
+        if (b.totalCount !== a.totalCount) return b.totalCount - a.totalCount;
+        return a.name.localeCompare(b.name, 'ko');
+      });
   }, [items, currentRoomFurniture, selectedFilterRoom, rooms]);
 
   const toggleFurniture = (furn) => {
@@ -299,6 +360,11 @@ export default function Dashboard({
     if (selectedLocations.length > 0) {
       const loc = (item.location || '미분류').trim();
       const matched = selectedLocations.some((k) => {
+        if (k === 'furn:미분류') {
+          if (loc === '미분류' || loc === '선택 대기') return true;
+          const fn = loc.includes(' · ') ? loc.slice(0, loc.indexOf(' · ')).trim() : loc;
+          return !currentRoomFurniture.some((f) => f.name === fn) && loc !== FLOOR_LOCATION;
+        }
         if (k.startsWith('furn:')) {
           const fn = k.slice(5);
           return loc === fn || loc.startsWith(`${fn} · `);
@@ -319,7 +385,7 @@ export default function Dashboard({
       if (!nameMatch && !descMatch && !catMatch && !locMatch) return false;
     }
     return true;
-  }), [items, selectedFilterRoom, rooms, selectedStatus, selectedCategory, selectedLocations, selectedUsage, searchQuery]);
+  }), [items, selectedFilterRoom, rooms, currentRoomFurniture, selectedStatus, selectedCategory, selectedLocations, selectedUsage, searchQuery]);
 
   const clearAllFilters = () => {
     setSelectedFilterRoom('all');
