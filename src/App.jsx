@@ -330,7 +330,7 @@ export default function App() {
         <div
           className={`${
             activeTab === 'dashboard'
-              ? 'w-full max-w-[1920px] px-4 sm:px-6 md:px-8 lg:px-10 xl:px-12 py-4 sm:py-6'
+              ? 'w-full max-w-5xl xl:max-w-6xl px-4 sm:px-6 md:px-8 py-4 sm:py-6'
               : activeTab === 'scan'
               ? 'w-full max-w-5xl px-3 sm:px-6 py-2 sm:py-3'
               : activeTab === 'chat'
