@@ -11,6 +11,7 @@ import UnsavedConfirmModal from './components/UnsavedConfirmModal';
 import AuthModal from './components/AuthModal';
 import DataRecoveryModal from './components/DataRecoveryModal';
 import { useCloudSync } from './hooks/useCloudSync';
+import { PRELOADED_RECOVERY_DATA } from './data/recoveryBackup';
 
 const TABS = [
   { id: 'scan', label: '스캔', icon: 'scan' },
@@ -35,6 +36,28 @@ export default function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
   const clearPendingNotice = useCallback(() => setPendingNotice(''), []);
+
+  const handleQuickRestore = useCallback(() => {
+    itemsHook.setItems(PRELOADED_RECOVERY_DATA.items);
+    room.setRooms(PRELOADED_RECOVERY_DATA.rooms);
+    room.setActiveRoomId(PRELOADED_RECOVERY_DATA.activeRoomId);
+
+    const userKey = user && !user.isGuest ? `cloomy_items_${user.uid}` : 'cloomy_items';
+    const userRoomKey = user && !user.isGuest ? `cloomy_rooms_${user.uid}` : 'cloomy_rooms';
+    const activeKey = user && !user.isGuest ? `cloomy_active_room_id_${user.uid}` : 'cloomy_active_room_id';
+
+    try {
+      localStorage.setItem(userKey, JSON.stringify(PRELOADED_RECOVERY_DATA.items));
+      localStorage.setItem('cloomy_items', JSON.stringify(PRELOADED_RECOVERY_DATA.items));
+      localStorage.setItem(userRoomKey, JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
+      localStorage.setItem('cloomy_rooms', JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
+      localStorage.setItem(activeKey, PRELOADED_RECOVERY_DATA.activeRoomId);
+      localStorage.setItem('cloomy_active_room_id', PRELOADED_RECOVERY_DATA.activeRoomId);
+      localStorage.setItem('cloomy_auto_recovered_v1', 'true');
+    } catch {}
+
+    alert(`물건 ${PRELOADED_RECOVERY_DATA.items.length}개와 방 2개('내 방', '안방')가 즉시 복원되었습니다! 🎉`);
+  }, [user, itemsHook, room]);
 
   // 미저장 작업 중 브라우저 새로고침/종료 방지
   useEffect(() => {
@@ -261,17 +284,19 @@ export default function App() {
 
           {/* 클라우드 동기화 상태 뱃지 */}
           {isLoggedIn && (
-            <div
-              className={`flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full transition-all ${
+            <button
+              type="button"
+              onClick={() => setShowRecoveryModal(true)}
+              className={`flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full transition-all cursor-pointer ${
                 syncStatus === 'permission_denied'
-                  ? 'bg-[#FFF0EE] text-[#E5484D] border border-[#FFD5CF]'
+                  ? 'bg-[#FFF0EE] text-[#E5484D] border border-[#FFD5CF] hover:bg-[#FFE5E0]'
                   : syncStatus === 'syncing'
                   ? 'bg-[#FAF8F5] text-[#8F5E4D]'
                   : 'bg-[#EAF5EC] text-[#3D7C4F]'
               }`}
               title={
                 syncStatus === 'permission_denied'
-                  ? 'Firestore 보안 규칙 설정 필요: 콘솔에서 규칙을 열어주세요'
+                  ? 'Firestore 보안 규칙 설정 필요: 클릭하여 설정 방법 보기'
                   : syncStatus === 'syncing'
                   ? '모바일/클라우드 동기화 진행 중...'
                   : '모바일/PC 클라우드 실시간 동기화 완료'
@@ -285,7 +310,7 @@ export default function App() {
                   ? '동기화 중'
                   : '클라우드 연동'}
               </span>
-            </div>
+            </button>
           )}
 
           {/* 사용자 프로필 / 로그인 버튼 */}
@@ -327,17 +352,29 @@ export default function App() {
 
       {/* 데이터 복구 알림 배너 */}
       {itemsHook.items.length <= 11 && (
-        <div className="bg-[#FFF8F0] border-b border-[#FFE8D6] px-4 py-2 flex items-center justify-between text-xs text-[#8A5D4D]">
-          <span className="truncate">
-            💡 이전 물건(42개)이 보이지 않으시나요? 브라우저 저장소나 다른 주소에서 바로 복구할 수 있어요.
-          </span>
-          <button
-            type="button"
-            onClick={() => setShowRecoveryModal(true)}
-            className="ml-2 px-2.5 py-1 rounded-xl bg-[#B56562] text-white font-bold text-[11px] hover:bg-[#9E4E4B] transition-all shrink-0 cursor-pointer shadow-xs"
-          >
-            복구 도구 열기
-          </button>
+        <div className="bg-[#FFF8F0] border-b border-[#FFE8D6] px-4 py-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-[#8A5D4D]">
+          <div className="flex items-center gap-2">
+            <span className="text-base">💡</span>
+            <span>
+              이전 물건(42개)이 보이지 않으시나요? 로컬 백업에서 <strong>전체 {PRELOADED_RECOVERY_DATA.items.length}개 물건 및 방</strong>을 즉시 복구할 수 있어요.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleQuickRestore}
+              className="px-3 py-1.5 rounded-xl bg-[#B56562] text-white font-extrabold text-xs hover:bg-[#9E4E4B] transition-all cursor-pointer shadow-xs whitespace-nowrap"
+            >
+              ✨ 전체 물건 즉시 복구
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowRecoveryModal(true)}
+              className="px-2.5 py-1.5 rounded-xl bg-white text-[#8A5D4D] border border-[#FFD5CF] font-bold text-xs hover:bg-[#FAF8F5] transition-all cursor-pointer whitespace-nowrap"
+            >
+              복구 도구
+            </button>
+          </div>
         </div>
       )}
 

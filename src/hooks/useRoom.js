@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { PRELOADED_RECOVERY_DATA } from '../data/recoveryBackup';
 
 export const FURNITURE = {
   drawers: { label: '서랍장', w: 2.2, d: 1.3, h: 1.5, color: '#c99c7a', slots: 3, configurableSlots: true },
@@ -110,13 +111,26 @@ const loadRooms = (userId) => {
     const parsedUser = rawUser ? JSON.parse(rawUser) : null;
     const parsedGuest = rawGuest ? JSON.parse(rawGuest) : null;
 
-    // 게스트 방 목록에 더 많은 방(거실 등)이 있으면 게스트 방 목록 우선 복원
-    const source =
+    // 게스트 방 목록에 더 많은 방이 있으면 게스트 방 목록 우선 복원
+    let source =
       Array.isArray(parsedGuest) && parsedGuest.length > (parsedUser?.length || 0)
         ? parsedGuest
         : Array.isArray(parsedUser) && parsedUser.length > 0
         ? parsedUser
         : parsedGuest;
+
+    // 만약 방이 1개뿐이고 신발장/서브책장 등 커스텀 가구가 없는 초기 상태라면 백업 데이터 복원
+    const hasCustomFurniture =
+      Array.isArray(source) &&
+      source.some(r => (r.furniture || []).some(f => f.id === 'shelf-sub' || f.name === '서브 책장' || f.name === '신발장 옆 공간'));
+
+    if ((!source || source.length <= 1 || !hasCustomFurniture) && PRELOADED_RECOVERY_DATA?.rooms?.length > 0) {
+      source = PRELOADED_RECOVERY_DATA.rooms;
+      try {
+        localStorage.setItem(roomsKey(userId), JSON.stringify(source));
+        localStorage.setItem('cloomy_rooms', JSON.stringify(source));
+      } catch {}
+    }
 
     if (Array.isArray(source) && source.length > 0) {
       return source.map((r, i) => ({

@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
+import { PRELOADED_RECOVERY_DATA } from '../data/recoveryBackup';
 
 const BASE_KEY = 'cloomy_items';
 const LEGACY_STORAGE_KEY = 'jeongnijjang_items';
+const RECOVERY_FLAG = 'cloomy_auto_recovered_v1';
 
 /** userId에 따라 스토리지 키를 결정 */
 function storageKey(userId) {
@@ -49,6 +51,16 @@ function loadItems(userId) {
           if (raw) addParsed(JSON.parse(raw));
         } catch {}
       }
+    }
+
+    // 4. 로컬 분실 상태 (11개 이하)이고 백업 데이터가 있는 경우 자동 복구
+    if (allFound.length <= 11 && PRELOADED_RECOVERY_DATA?.items?.length > 0) {
+      addParsed(PRELOADED_RECOVERY_DATA.items);
+      try {
+        localStorage.setItem(RECOVERY_FLAG, 'true');
+        localStorage.setItem(userKey, JSON.stringify(allFound));
+        localStorage.setItem(BASE_KEY, JSON.stringify(allFound));
+      } catch {}
     }
   } catch {}
 
