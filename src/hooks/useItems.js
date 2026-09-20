@@ -165,6 +165,7 @@ export function useItems(userId) {
 
   return {
     items,
+    setItems,
     loading,
     addItems,
     updateItem,

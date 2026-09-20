@@ -9,6 +9,7 @@ import RoomPage from './pages/RoomPage';
 import { useRoom, slotCount, findOpenPosition } from './hooks/useRoom';
 import UnsavedConfirmModal from './components/UnsavedConfirmModal';
 import AuthModal from './components/AuthModal';
+import { useCloudSync } from './hooks/useCloudSync';
 
 const TABS = [
   { id: 'scan', label: '스캔', icon: 'scan' },
@@ -24,6 +25,7 @@ export default function App() {
   const userId = user?.uid;
   const itemsHook = useItems(userId);
   const room = useRoom(userId);
+  const { syncStatus, syncMessage } = useCloudSync({ user, itemsHook, room });
   const [pendingNotice, setPendingNotice] = useState('');
   const [pendingDeclutterItems, setPendingDeclutterItems] = useState(null);
   const [hasUnsavedScan, setHasUnsavedScan] = useState(false);
@@ -244,6 +246,35 @@ export default function App() {
           <span className="text-[11px] sm:text-xs font-extrabold text-[#8F5E4D] bg-[#FFF0E5] px-2.5 sm:px-3 py-1.5 rounded-full shadow-[0_3px_10px_rgba(255,218,193,0.3)]">
             등록 물건 {itemsHook.items.length}개
           </span>
+
+          {/* 클라우드 동기화 상태 뱃지 */}
+          {isLoggedIn && (
+            <div
+              className={`flex items-center gap-1 text-[11px] font-bold px-2 py-1 rounded-full transition-all ${
+                syncStatus === 'permission_denied'
+                  ? 'bg-[#FFF0EE] text-[#E5484D] border border-[#FFD5CF]'
+                  : syncStatus === 'syncing'
+                  ? 'bg-[#FAF8F5] text-[#8F5E4D]'
+                  : 'bg-[#EAF5EC] text-[#3D7C4F]'
+              }`}
+              title={
+                syncStatus === 'permission_denied'
+                  ? 'Firestore 보안 규칙 설정 필요: 콘솔에서 규칙을 열어주세요'
+                  : syncStatus === 'syncing'
+                  ? '모바일/클라우드 동기화 진행 중...'
+                  : '모바일/PC 클라우드 실시간 동기화 완료'
+              }
+            >
+              <span>{syncStatus === 'permission_denied' ? '⚠️' : syncStatus === 'syncing' ? '🔄' : '☁️'}</span>
+              <span className="hidden md:inline">
+                {syncStatus === 'permission_denied'
+                  ? '동기화설정필요'
+                  : syncStatus === 'syncing'
+                  ? '동기화 중'
+                  : '클라우드 연동'}
+              </span>
+            </div>
+          )}
 
           {/* 사용자 프로필 / 로그인 버튼 */}
           <button
