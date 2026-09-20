@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { getCloudData, saveCloudData, subscribeCloudData } from '../services/cloudSync';
 import { isFirebaseConfigured } from '../services/firebase';
 import { PRELOADED_RECOVERY_DATA } from '../data/recoveryBackup';
@@ -217,5 +217,39 @@ export function useCloudSync({ user, itemsHook, room }) {
     };
   }, [itemsHook.items, room.rooms, room.activeRoomId, userId, isGuest]);
 
-  return { syncStatus, syncMessage };
+  // 수동 즉시 클라우드 연동/저장 함수
+  const forceSyncCloud = useCallback(async () => {
+    if (!isFirebaseConfigured || !userId || isGuest) {
+      return { success: false, reason: 'not_logged_in' };
+    }
+    try {
+      setSyncStatus('syncing');
+      const now = Date.now();
+      lastCloudTimestampRef.current = now;
+      await saveCloudData(userId, {
+        items: itemsHook.items,
+        rooms: room.rooms,
+        activeRoomId: room.activeRoomId,
+      });
+      setSyncStatus('synced');
+      return { success: true };
+    } catch (err) {
+      const isPermission =
+        err?.code === 'permission-denied' ||
+        err?.code === 'firestore/permission-denied' ||
+        err?.message?.includes('permission') ||
+        err?.message?.includes('Missing or insufficient permissions');
+
+      if (isPermission) {
+        setSyncStatus('permission_denied');
+        setSyncMessage('Firebase Firestore 보안 규칙 설정이 필요합니다.');
+        return { success: false, reason: 'permission_denied', error: err };
+      } else {
+        setSyncStatus('error');
+        return { success: false, reason: 'error', error: err };
+      }
+    }
+  }, [userId, isGuest, itemsHook.items, room.rooms, room.activeRoomId]);
+
+  return { syncStatus, syncMessage, forceSyncCloud };
 }

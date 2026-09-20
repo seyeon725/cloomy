@@ -18,6 +18,8 @@ const paths = {
   filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></>,
   cloud: <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />,
   cloudCheck: <><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /><path d="m9 13 2 2 4-4" /></>,
+  save: <><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></>,
+  check: <polyline points="20 6 9 17 4 12" />,
 };
 
 export default function Icon({ name, size = 20, strokeWidth = 1.8, className = '', fill = 'none', fillOpacity, label }) {

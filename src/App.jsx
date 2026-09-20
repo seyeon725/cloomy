@@ -26,7 +26,7 @@ export default function App() {
   const userId = user?.uid;
   const itemsHook = useItems(userId);
   const room = useRoom(userId);
-  const { syncStatus, syncMessage } = useCloudSync({ user, itemsHook, room });
+  const { syncStatus, syncMessage, forceSyncCloud } = useCloudSync({ user, itemsHook, room });
   const [pendingNotice, setPendingNotice] = useState('');
   const [pendingDeclutterItems, setPendingDeclutterItems] = useState(null);
   const [hasUnsavedScan, setHasUnsavedScan] = useState(false);
@@ -34,7 +34,45 @@ export default function App() {
   const [unsavedNavTarget, setUnsavedNavTarget] = useState(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [showRecoveryModal, setShowRecoveryModal] = useState(false);
+  const [saveStatus, setSaveStatus] = useState('idle'); // 'idle' | 'saving' | 'saved'
+  const [saveToast, setSaveToast] = useState('');
+  const saveToastTimerRef = useRef(null);
   const clearPendingNotice = useCallback(() => setPendingNotice(''), []);
+
+  // 수동 저장(클라우드 즉시 연동) 핸들러
+  const handleManualSave = useCallback(async () => {
+    if (saveToastTimerRef.current) clearTimeout(saveToastTimerRef.current);
+
+    const isLoggedIn = user && !user.isGuest;
+    if (!isLoggedIn) {
+      setSaveStatus('saved');
+      setSaveToast('브라우저 로컬에 안전하게 저장되었습니다. (Google 로그인 시 모바일/클라우드 연동)');
+      saveToastTimerRef.current = setTimeout(() => {
+        setSaveStatus('idle');
+        setSaveToast('');
+      }, 3000);
+      return;
+    }
+
+    setSaveStatus('saving');
+    const result = await forceSyncCloud();
+    if (result?.success) {
+      setSaveStatus('saved');
+      setSaveToast('현재 내용이 클라우드에 안전하게 저장되었습니다! ✓');
+    } else if (result?.reason === 'permission_denied') {
+      setSaveStatus('idle');
+      setShowRecoveryModal(true);
+      setSaveToast('Firebase Firestore 보안 규칙 설정이 필요합니다.');
+    } else {
+      setSaveStatus('idle');
+      setSaveToast('클라우드 저장 중 일시적인 오류가 발생했습니다.');
+    }
+
+    saveToastTimerRef.current = setTimeout(() => {
+      setSaveStatus('idle');
+      setSaveToast('');
+    }, 3000);
+  }, [user, forceSyncCloud]);
 
   // 미저장 작업 중 브라우저 새로고침/종료 방지
   useEffect(() => {
@@ -251,6 +289,32 @@ export default function App() {
             등록 물건 {itemsHook.items.length}개
           </span>
 
+          {/* 저장 아이콘 버튼 (클라우드 즉시 연동 및 영구 저장 - 깔끔한 클래식 디스크 아이콘) */}
+          <button
+            type="button"
+            onClick={handleManualSave}
+            disabled={saveStatus === 'saving'}
+            className={`relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full transition-all cursor-pointer shadow-xs active:scale-95 border ${
+              saveStatus === 'saved'
+                ? 'bg-[#EAF5EC] hover:bg-[#DDF2E1] border-[#B7E4C7] text-[#2E7D32]'
+                : saveStatus === 'saving'
+                ? 'bg-[#FFFBEB] border-[#FDE68A] text-[#D97706]'
+                : 'bg-white hover:bg-[#FAF8F5] border-[#E0D8D4] text-[#705E5B] hover:text-[#B56562]'
+            }`}
+            title="저장 (현재 내용을 클라우드에 즉시 연동/저장)"
+          >
+            {saveStatus === 'saved' ? (
+              <Icon name="check" size={17} strokeWidth={2.4} className="text-[#2E7D32]" />
+            ) : saveStatus === 'saving' ? (
+              <svg className="animate-spin w-4 h-4 text-[#D97706]" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+            ) : (
+              <Icon name="save" size={16} strokeWidth={1.8} />
+            )}
+          </button>
+
           {/* 클라우드 연동 및 백업 아이콘 버튼 */}
           <button
             type="button"
@@ -332,6 +396,14 @@ export default function App() {
           </button>
         </div>
       </header>
+
+      {/* 수동 저장 피드백 토스트 */}
+      {saveToast && (
+        <div className="fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-50 bg-[#2D2828]/95 backdrop-blur-xs text-white text-xs font-bold px-4 py-2 rounded-full shadow-lg flex items-center gap-2 animate-[fadeIn_0.15s_ease-out] pointer-events-none">
+          <span>{saveStatus === 'saved' ? '💾' : 'ℹ️'}</span>
+          <span>{saveToast}</span>
+        </div>
+      )}
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto pb-16 sm:pb-20">
