@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { dimensions, findOpenPosition, FLOOR_LOCATION, FURNITURE, slotCount, slotName } from '../hooks/useRoom';
 import FurnitureDeleteModal from '../components/FurnitureDeleteModal';
+import SlotDeleteModal from '../components/SlotDeleteModal';
 import MoveItemsModal from '../components/MoveItemsModal';
 import UnplacedItemsModal from '../components/UnplacedItemsModal';
 import PlacedSummaryModal from '../components/PlacedSummaryModal';
@@ -93,6 +94,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
   const [layoutNotice, setLayoutNotice] = useState('');
   const [stackBaseId, setStackBaseId] = useState(null);
   const [deletingFurniture, setDeletingFurniture] = useState(null);
+  const [deletingSlotInfo, setDeletingSlotInfo] = useState(null);
   const [isItemSelectMode, setIsItemSelectMode] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState([]);
   const [showMoveModal, setShowMoveModal] = useState(false);
@@ -385,11 +387,16 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     const removedLocation = slotName(selected, nextSlots);
     const affected = currentRoomItems.filter(i => i.location === removedLocation);
     if (affected.length > 0) {
-      updateMultipleItems(affected.map(i => ({ id: i.id, location: '미분류', roomId: activeRoom.id })));
-      setLayoutNotice(`${selected.name}의 마지막 칸을 삭제하고, 보관 중이던 물건 ${affected.length}개를 미분류로 이동했어요.`);
-    } else {
-      setLayoutNotice(`${selected.name}의 칸을 삭제했어요. (총 ${nextSlots}칸)`);
+      setDeletingSlotInfo({
+        furniture: selected,
+        slotIndex: nextSlots,
+        slotLabel: removedLocation,
+        items: affected,
+        nextSlots,
+      });
+      return;
     }
+    setLayoutNotice(`${selected.name}의 칸을 삭제했어요. (총 ${nextSlots}칸)`);
     setFurniture(prev => prev.map(f => f.id === selectedId ? { ...f, slots: nextSlots } : f));
     setSlot(currentSlot => Math.min(currentSlot, Math.max(0, nextSlots - 1)));
   };
@@ -617,6 +624,18 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     setSelectedIds([]);
     setLayoutNotice(`'${deletingFurniture.name}' 가구를 삭제하고 물건을 이동했어요.`);
     setDeletingFurniture(null);
+  };
+  const handleConfirmSlotDeleteWithMoves = (moveMap) => {
+    if (!deletingSlotInfo) return;
+    const { furniture: targetFurniture, slotIndex, items: slotItems, nextSlots } = deletingSlotInfo;
+    const updates = Object.entries(moveMap).map(([id, location]) => ({ id, location, roomId: activeRoom.id }));
+    if (updates.length > 0) {
+      updateMultipleItems(updates);
+    }
+    setFurniture(prev => prev.map(f => f.id === targetFurniture.id ? { ...f, slots: nextSlots } : f));
+    setSlot(currentSlot => Math.min(currentSlot, Math.max(0, nextSlots - 1)));
+    setLayoutNotice(`${targetFurniture.name}의 ${slotIndex + 1}번째 칸을 삭제하고 보관 중이던 물건 ${slotItems.length}개를 이동했어요.`);
+    setDeletingSlotInfo(null);
   };
   const toggleItemSelection = (id) => {
     setSelectedItemIds(prev =>
@@ -925,8 +944,11 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
             const size = baseInside ? dimensions(baseInside) : dimensions(inside);
             const type = configFor(inside);
             const count = currentRoomItems.filter(i => i.location === inside.name || (inside.type === 'floorStorage' && i.location === FLOOR_LOCATION) || Array.from({length:slotCount(inside)},(_,n)=>locationFor(inside,n)).includes(i.location) || i.location.startsWith(`${inside.name} · `)).length;
-            const displaySize = { ...size, h: Math.min(1.35, Math.max(.45, size.h * .3)) };
-            const stackZ = baseParent ? Math.min(1.35, Math.max(.45, dimensions(baseParent).h * .3)) : 0;
+            const defaultHeight = FURNITURE[f.type]?.h ?? rawSize.h;
+            const displayHeight = Math.min(1.35, Math.max(.45, defaultHeight * .3));
+            const displaySize = { ...size, h: displayHeight };
+            const baseDefaultHeight = baseParent ? (FURNITURE[baseParent.type]?.h ?? baseRawSize.h) : 0;
+            const stackZ = baseParent ? Math.min(1.35, Math.max(.45, baseDefaultHeight * .3)) : 0;
             const isSelected = selectedIds.includes(f.id);
             const isBed = inside.type === 'bed';
             const topZ = stackZ + displaySize.h + .02;
@@ -944,7 +966,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
           {editing && resizeTarget && selectedIds.length === 1 && (() => {
             const size = dimensions(resizeTarget);
             const group = furniture.filter(f => f.id === resizeTarget.id || f.stackedOn === resizeTarget.id);
-            const resizeZ = group.reduce((total, f) => total + Math.min(1.35, Math.max(.45, dimensions(f).h * .3)), 0) + .08;
+            const resizeZ = group.reduce((total, f) => total + Math.min(1.35, Math.max(.45, (FURNITURE[f.type]?.h ?? dimensions(f).h) * .3)), 0) + .08;
             return <g aria-label={`${resizeTarget.name} 크기 조절 핸들`} className="room-resize-layer">{[['west', resizeTarget.x, resizeTarget.y + size.d / 2], ['east', resizeTarget.x + size.w, resizeTarget.y + size.d / 2], ['north', resizeTarget.x + size.w / 2, resizeTarget.y], ['south', resizeTarget.x + size.w / 2, resizeTarget.y + size.d]].map(([edge, x, y]) => { const [cx, cy] = point(x, y, resizeZ); return <circle key={edge} cx={cx} cy={cy} r="7" fill="#fff9f2" stroke="#a66760" strokeWidth="2.5" className="room-resize-handle" onPointerDown={event => beginResize(event, resizeTarget, edge)} />; })}</g>;
           })()}
         </svg>
@@ -1066,6 +1088,18 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
         otherFurniture={furniture.filter(f => f.id !== deletingFurniture.id)}
         onConfirm={handleConfirmDeleteWithMoves}
         onClose={() => setDeletingFurniture(null)}
+      />
+    )}
+    {deletingSlotInfo && (
+      <SlotDeleteModal
+        furniture={deletingSlotInfo.furniture}
+        slotIndex={deletingSlotInfo.slotIndex}
+        slotLabel={deletingSlotInfo.slotLabel}
+        items={deletingSlotInfo.items}
+        nextSlots={deletingSlotInfo.nextSlots}
+        otherFurniture={furniture.filter(f => f.id !== deletingSlotInfo.furniture.id)}
+        onConfirm={handleConfirmSlotDeleteWithMoves}
+        onClose={() => setDeletingSlotInfo(null)}
       />
     )}
     {showMoveModal && (
