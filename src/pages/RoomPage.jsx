@@ -84,8 +84,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
   const [slot, setSlot] = useState(0);
   const [showAddRoomModal, setShowAddRoomModal] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
-  const [editingRoomId, setEditingRoomId] = useState(null);
-  const [editRoomName, setEditRoomName] = useState('');
+  const [isRoomEditMode, setIsRoomEditMode] = useState(false);
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
@@ -758,49 +757,82 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     </div>
 
     {/* Room Switcher Tabs */}
-    <div className="flex items-center gap-2 overflow-x-auto pb-3 pt-1 scrollbar-none">
+    <div className="flex items-center gap-2.5 overflow-x-auto pb-3 pt-2.5 px-1 scrollbar-none">
       {rooms.map((r) => {
         const isActive = r.id === activeRoomId;
         return (
-          <div key={r.id} className="flex items-center">
-            <button
-              type="button"
-              onClick={() => setActiveRoomId && setActiveRoomId(r.id)}
-              className={`px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer whitespace-nowrap shadow-xs ${
-                isActive
-                  ? 'bg-[#B56562] text-white shadow-md scale-102'
-                  : 'bg-white text-[#705E5B] hover:bg-[#FFF2F0] border border-[#EFE8E3]'
-              }`}
-            >
-              {r.name}
-            </button>
-            {isActive && rooms.length > 1 && (
-              <div className="flex items-center gap-1 ml-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setEditingRoomId(r.id);
-                    setEditRoomName(r.name);
-                  }}
-                  className="w-7 h-7 rounded-xl bg-white border border-[#EFE8E3] hover:bg-[#FFF2F0] text-[#9A8784] hover:text-[#B56562] flex items-center justify-center text-xs transition-all shadow-xs cursor-pointer"
-                  title="방 이름 변경"
-                >
-                  ✏️
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (confirm(`'${r.name}' 방을 정말 삭제하시겠습니까?`)) {
-                      deleteRoom && deleteRoom(r.id);
-                      showToast(`'${r.name}' 방을 삭제했어요.`);
+          <div key={r.id} className="relative flex items-center shrink-0">
+            {/* 모서리 - 삭제 버튼 (편집 모드일 때만 표시) */}
+            {isRoomEditMode && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (rooms.length <= 1) {
+                    showToast('방은 최소 1개 이상 있어야 해요.');
+                    return;
+                  }
+                  if (confirm(`'${r.name}' 방을 정말 삭제하시겠습니까?`)) {
+                    deleteRoom && deleteRoom(r.id);
+                    showToast(`'${r.name}' 방을 삭제했어요.`);
+                  }
+                }}
+                className="absolute -top-2 -left-2 z-20 w-5.5 h-5.5 rounded-full bg-[#E5484D] text-white flex items-center justify-center font-bold text-xs shadow-md hover:bg-[#D13438] active:scale-90 transition-transform cursor-pointer border-2 border-white select-none"
+                title="방 삭제"
+                aria-label={`${r.name} 삭제`}
+              >
+                <span className="relative -top-[1px] leading-none text-sm">−</span>
+              </button>
+            )}
+
+            {isRoomEditMode ? (
+              <div
+                onClick={() => setActiveRoomId && setActiveRoomId(r.id)}
+                className={`px-3 py-1.5 rounded-2xl text-xs sm:text-sm font-extrabold border transition-all flex items-center shadow-xs cursor-text ${
+                  isActive
+                    ? 'bg-white border-[#B56562] text-[#B56562] ring-2 ring-[#B56562]/20'
+                    : 'bg-white border-[#E8DFD8] text-[#705E5B]'
+                }`}
+              >
+                <input
+                  type="text"
+                  defaultValue={r.name}
+                  key={`${r.id}-${r.name}`}
+                  className="bg-transparent text-xs sm:text-sm font-extrabold text-center focus:outline-none w-20 sm:w-24 text-inherit border-b border-dashed border-[#B56562]/40 focus:border-[#B56562] pb-0.5"
+                  onBlur={(e) => {
+                    const val = e.target.value.trim();
+                    if (val && val !== r.name) {
+                      renameRoom && renameRoom(r.id, val);
+                      showToast('방 이름을 변경했어요.');
+                    } else {
+                      e.target.value = r.name;
                     }
                   }}
-                  className="w-7 h-7 rounded-xl bg-white border border-[#EFE8E3] hover:bg-[#FFEAE8] text-[#9A8784] hover:text-red-500 flex items-center justify-center text-xs transition-all shadow-xs cursor-pointer"
-                  title="방 삭제"
-                >
-                  🗑️
-                </button>
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setActiveRoomId && setActiveRoomId(r.id);
+                  }}
+                  placeholder="방 이름"
+                  maxLength={15}
+                />
               </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setActiveRoomId && setActiveRoomId(r.id)}
+                className={`px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer whitespace-nowrap shadow-xs ${
+                  isActive
+                    ? 'bg-[#B56562] text-white shadow-md scale-102'
+                    : 'bg-white text-[#705E5B] hover:bg-[#FFF2F0] border border-[#EFE8E3]'
+                }`}
+              >
+                {r.name}
+              </button>
             )}
           </div>
         );
@@ -813,10 +845,34 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
           setNewRoomName('');
           setShowAddRoomModal(true);
         }}
-        className="px-3.5 py-2 rounded-2xl text-xs sm:text-sm font-extrabold text-[#B56562] bg-[#FFF0EE] hover:bg-[#FFE5E0] border border-[#FFD5CF] flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer active:scale-95 shadow-xs"
+        className="px-3.5 py-2 rounded-2xl text-xs sm:text-sm font-extrabold text-[#B56562] bg-[#FFF0EE] hover:bg-[#FFE5E0] border border-[#FFD5CF] flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer active:scale-95 shadow-xs shrink-0"
       >
         <span>+</span>
         <span>방 추가</span>
+      </button>
+
+      {/* 방 편집 토글 버튼 */}
+      <button
+        type="button"
+        onClick={() => setIsRoomEditMode(!isRoomEditMode)}
+        className={`px-3 py-2 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer active:scale-95 shadow-xs shrink-0 ${
+          isRoomEditMode
+            ? 'bg-[#B56562] text-white shadow-sm'
+            : 'bg-white text-[#705E5B] hover:bg-[#FFF2F0] border border-[#EFE8E3]'
+        }`}
+        title={isRoomEditMode ? '편집 완료' : '방 편집'}
+      >
+        {isRoomEditMode ? (
+          <>
+            <span className="text-xs font-black">✓</span>
+            <span>완료</span>
+          </>
+        ) : (
+          <>
+            <span>✏️</span>
+            <span>편집</span>
+          </>
+        )}
       </button>
     </div>
     {saveError && <p role="alert">{saveError}</p>}
@@ -1108,52 +1164,5 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
       </div>
     )}
 
-    {/* 방 이름 수정 모달 */}
-    {editingRoomId && (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 backdrop-blur-xs px-4" onClick={() => setEditingRoomId(null)}>
-        <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-[fadeIn_0.15s_ease-out]" onClick={e => e.stopPropagation()}>
-          <h3 className="text-base font-black text-[#4A3E3D] mb-1">방 이름 변경</h3>
-          <p className="text-xs text-[#9A8784] mb-4">방의 새 이름을 입력해 주세요.</p>
-
-          <input
-            type="text"
-            value={editRoomName}
-            onChange={(e) => setEditRoomName(e.target.value)}
-            className="w-full px-4 py-3 rounded-2xl bg-[#FAF8F5] border border-[#E8E0DC] text-sm font-semibold text-[#4A3E3D] focus:outline-none focus:border-[#B56562] mb-4"
-            autoFocus
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && editRoomName.trim()) {
-                renameRoom && renameRoom(editingRoomId, editRoomName.trim());
-                setEditingRoomId(null);
-                showToast('방 이름을 변경했어요.');
-              }
-            }}
-          />
-
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setEditingRoomId(null)}
-              className="flex-1 py-3 rounded-2xl bg-[#FAF8F5] text-[#9A8784] font-bold text-sm hover:bg-[#F0ECE9] transition-all cursor-pointer"
-            >
-              취소
-            </button>
-            <button
-              type="button"
-              disabled={!editRoomName.trim()}
-              onClick={() => {
-                if (!editRoomName.trim()) return;
-                renameRoom && renameRoom(editingRoomId, editRoomName.trim());
-                setEditingRoomId(null);
-                showToast('방 이름을 변경했어요.');
-              }}
-              className="flex-1 py-3 rounded-2xl bg-[#B56562] text-white font-bold text-sm hover:bg-[#9E4E4B] transition-all disabled:opacity-40 cursor-pointer shadow-sm"
-            >
-              변경 완료
-            </button>
-          </div>
-        </div>
-      </div>
-    )}
   </div>;
 }
