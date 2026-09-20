@@ -206,24 +206,47 @@ function generateLocalConsultantResponse(items, userMessage) {
   }
 
   // "사진 없는 물건 비우기" 감지
-  const isPhotoNoneDeclutter =
-    (msgLower.includes('사진') && (msgLower.includes('없는') || msgLower.includes('안') || msgLower.includes('등록 안') || msgLower.includes('등록안') || msgLower.includes('미등록'))) &&
-    (msgLower.includes('비움') || msgLower.includes('비워') || msgLower.includes('버려') || msgLower.includes('폐기') || msgLower.includes('정리'));
+  const t = (userMessage || '').replace(/\s+/g, '').toLowerCase();
+  const hasPhotoKeyword = t.includes('사진') || t.includes('이미지') || t.includes('아이콘') || t.includes('카메라');
+  const hasNegativeKeyword =
+    t.includes('없는') ||
+    t.includes('없') ||
+    t.includes('안된') ||
+    t.includes('안등록') ||
+    t.includes('등록안') ||
+    t.includes('미등록') ||
+    t.includes('기본') ||
+    t.includes('안찍') ||
+    t.includes('안들어');
+  const hasDiscardKeyword =
+    t.includes('비움') ||
+    t.includes('비워') ||
+    t.includes('버려') ||
+    t.includes('폐기') ||
+    t.includes('정리') ||
+    t.includes('삭제');
+
+  const isPhotoNoneDeclutter = hasPhotoKeyword && hasNegativeKeyword && hasDiscardKeyword;
 
   if (isPhotoNoneDeclutter) {
-    const noPhotoItems = items.filter((i) => (!i.imageUrl || i.imageUrl.length === 0) && i.status !== 'discarded');
+    const hasPhoto = (item) => Boolean(item?.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.trim().length > 0);
+    const noPhotoItems = items.filter((i) => !hasPhoto(i) && i.status !== 'discarded');
+    const photoItems = items.filter((i) => hasPhoto(i));
+
     if (noPhotoItems.length > 0) {
       noPhotoItems.forEach((item) => {
         actions.push({ type: 'discard', targetId: item.id, targetName: item.name });
       });
+      const preview = noPhotoItems.slice(0, 4).map((i) => `'${i.name}'`).join(', ');
+      const more = noPhotoItems.length > 4 ? ` 외 ${noPhotoItems.length - 4}개` : '';
       return {
-        reply: `사진이 등록되지 않은 물건 ${noPhotoItems.length}개를 비움(폐기) 처리했어요! ✨`,
-        quickReplies: ['내 물건 보기 📋', '다른 물건 정리 🧹', '정리 완료 ✨'],
+        reply: `사진이 등록되지 않은 물건 총 ${noPhotoItems.length}개(${preview}${more})를 비움 처리했어요! 🗑️ (사진 등록된 ${photoItems.length}개 물건은 안전하게 보관 중입니다 ✨)`,
+        quickReplies: ['내 물건 보기 📋', '방금 비움 실행 취소 ↩️', '정리 완료 ✨'],
         actions,
       };
     } else {
       return {
-        reply: `사진이 없는 물건이 없거나 이미 모두 비움 처리되었습니다. 😊`,
+        reply: `현재 사진이 없는 물건이 없거나 이미 모두 비움 처리되었습니다. 사진이 있는 ${photoItems.length}개 물건은 안전하게 보관 중이에요! 😊`,
         quickReplies: ['자주 쓰는 물건 정리 ⭐', '미분류 물건 배치 📍', '정리 완료 ✨'],
         actions: [],
       };
@@ -275,7 +298,7 @@ export async function chatWithAgent(items, chatHistory, userMessage) {
     location: i.location || '미분류',
     usage: i.usage || 'frequent',
     status: i.status || 'active',
-    hasPhoto: Boolean(i.imageUrl && i.imageUrl.length > 0),
+    hasPhoto: Boolean(i.imageUrl && typeof i.imageUrl === 'string' && i.imageUrl.trim().length > 0),
   }));
 
   const systemPrompt = `당신은 방 정리 앱 "CLOOMY"의 초간결 AI 정리 비서입니다.

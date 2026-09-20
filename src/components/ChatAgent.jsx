@@ -4,6 +4,31 @@ import { USAGE_CONFIG } from '../hooks/useItems';
 
 const CHAT_STORAGE_KEY = 'cloomy_chat_messages';
 
+function checkIsNoPhotoDeclutterIntent(text) {
+  if (!text) return false;
+  const t = text.replace(/\s+/g, '').toLowerCase();
+  const hasPhotoKeyword = t.includes('사진') || t.includes('이미지') || t.includes('아이콘') || t.includes('카메라');
+  const hasNegativeKeyword =
+    t.includes('없는') ||
+    t.includes('없') ||
+    t.includes('안된') ||
+    t.includes('안등록') ||
+    t.includes('등록안') ||
+    t.includes('미등록') ||
+    t.includes('기본') ||
+    t.includes('안찍') ||
+    t.includes('안들어');
+  const hasDiscardKeyword =
+    t.includes('비움') ||
+    t.includes('비워') ||
+    t.includes('버려') ||
+    t.includes('폐기') ||
+    t.includes('정리') ||
+    t.includes('삭제');
+
+  return hasPhotoKeyword && hasNegativeKeyword && hasDiscardKeyword;
+}
+
 export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems, onClearDeclutterItems }) {
   const items = itemsHook?.items || itemsProp || [];
   const updateItem = itemsHook?.updateItem;
@@ -29,6 +54,10 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
     }
   });
   const bottomRef = useRef(null);
+  const lastDeclutteredIdsRef = useRef([]);
+
+  // 사진 유무 완벽 판별 헬퍼
+  const hasPhoto = (item) => Boolean(item?.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.trim().length > 0);
 
   // 메시지 로컬스토리지 보존 (새로고침 시 대화 및 결과 유지)
   useEffect(() => {
@@ -43,19 +72,18 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
 
   // AI가 지시한 실시간 물건 변경사항 실행 (원자적 일괄 업데이트 & 안전가드 탑재)
   const applyActions = useCallback(
-    (actions, contextUserMsg = '') => {
+    (actions, contextUserMsg = '', chatHistory = []) => {
       const applied = [];
       if (!Array.isArray(actions) || (!updateMultipleItems && !updateItem)) return applied;
 
-      // 사용자의 메시지에서 '사진 없는/안 등록된 물건' 요청 여부 감지
-      const msgLower = (contextUserMsg || '').toLowerCase();
-      const isUserAskingNoPhotoOnly =
-        msgLower.includes('사진') &&
-        (msgLower.includes('없는') ||
-          msgLower.includes('안') ||
-          msgLower.includes('등록 안') ||
-          msgLower.includes('등록안') ||
-          msgLower.includes('미등록'));
+      // 최근 메시지에서 '사진 없는/안 등록된 물건' 요청 여부 감지
+      const recentUserText = [
+        contextUserMsg,
+        ...(chatHistory || []).filter((m) => m.role === 'user').map((m) => m.text),
+      ]
+        .slice(0, 3)
+        .join(' ');
+      const isUserAskingNoPhotoOnly = checkIsNoPhotoDeclutterIntent(recentUserText);
 
       const itemUpdates = [];
 
@@ -76,10 +104,17 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
         }
 
         if (matched) {
-          // [이중 안전장치]: 사용자가 사진 없는 물건 비우기를 요청했는데 AI가 사진 있는 물건을 discard 대상으로 보낸 경우 철저히 제외
-          if (isUserAskingNoPhotoOnly && act.type === 'discard' && Boolean(matched.imageUrl && matched.imageUrl.length > 0)) {
-            console.warn(`[ChatAgent] 안전 가드: 사진이 등록된 '${matched.name}'은(는) 비움 대상에서 보호되었습니다.`);
-            continue;
+          const itemHasPhoto = hasPhoto(matched);
+
+          // [이중 안전장치]: 사진 없는 물건 비우기 요청 맥락인 경우, 사진이 있는 물건은 비움/폐기/이동에서 100% 보호
+          if (isUserAskingNoPhotoOnly && itemHasPhoto) {
+            if (
+              act.type === 'discard' ||
+              (act.type === 'move' && (act.location?.includes('비움') || act.location?.includes('폐기')))
+            ) {
+              console.warn(`[ChatAgent] 안전 가드: 사진이 등록된 '${matched.name}'은(는) 비움 대상에서 완벽히 보호되었습니다.`);
+              continue;
+            }
           }
 
           const now = new Date().toISOString();
@@ -242,9 +277,96 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
       setMessages(newMessages);
       setIsLoading(true);
 
+      // 1. 실행 취소 요청 감지
+      const isUndoRequest =
+        userMsg.includes('실행 취소') ||
+        userMsg.includes('되돌리기') ||
+        userMsg.includes('취소해') ||
+        userMsg === '취소';
+
+      if (isUndoRequest && lastDeclutteredIdsRef.current.length > 0) {
+        const idsToRestore = lastDeclutteredIdsRef.current;
+        const now = new Date().toISOString();
+        const restoreUpdates = idsToRestore.map((id) => ({ id, status: 'active', updatedAt: now }));
+        if (updateMultipleItems) {
+          updateMultipleItems(restoreUpdates);
+        } else if (updateItem) {
+          restoreUpdates.forEach((u) => updateItem(u.id, { status: 'active' }));
+        }
+        lastDeclutteredIdsRef.current = [];
+
+        const applied = idsToRestore.map((id) => {
+          const it = items.find((i) => i.id === id);
+          return { emoji: '↩️', desc: `'${it?.name || '물건'}' 보관 복원` };
+        });
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            text: `방금 비움 처리되었던 물건 ${idsToRestore.length}개를 다시 정상 보관 상태로 복원했어요! ✨`,
+            quickReplies: ['내 물건 보기 📋', '자주 쓰는 물건 정리 ⭐', '정리 완료 ✨'],
+            appliedChanges: applied,
+          },
+        ]);
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. '사진 없는 물건 비우기' 요청 즉시 100% 무결점 처리
+      if (checkIsNoPhotoDeclutterIntent(userMsg)) {
+        const noPhotoItems = items.filter((i) => !hasPhoto(i) && i.status !== 'discarded');
+        const photoItems = items.filter((i) => hasPhoto(i));
+
+        if (noPhotoItems.length > 0) {
+          const now = new Date().toISOString();
+          const updates = noPhotoItems.map((i) => ({ id: i.id, status: 'discarded', updatedAt: now }));
+          lastDeclutteredIdsRef.current = noPhotoItems.map((i) => i.id);
+
+          if (updateMultipleItems) {
+            updateMultipleItems(updates);
+          } else if (updateItem) {
+            updates.forEach((u) => updateItem(u.id, { status: 'discarded' }));
+          }
+
+          const applied = noPhotoItems.map((i) => ({
+            emoji: '🗑️',
+            desc: `'${i.name}' 비우기(폐기) 처리`,
+          }));
+
+          const previewNames = noPhotoItems.slice(0, 4).map((i) => `'${i.name}'`).join(', ');
+          const moreCount = noPhotoItems.length > 4 ? ` 외 ${noPhotoItems.length - 4}개` : '';
+
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              text: `사진이 등록되지 않은 물건 총 ${noPhotoItems.length}개(${previewNames}${moreCount})를 비움 처리했어요! 🗑️\n\n📸 사진이 등록된 물건 ${photoItems.length}개는 단 하나도 건드리지 않고 안전하게 보관 상태로 유지했습니다! ✨`,
+              quickReplies: ['내 물건 보기 📋', '방금 비움 실행 취소 ↩️', '정리 완료 ✨'],
+              appliedChanges: applied,
+            },
+          ]);
+          setIsLoading(false);
+          return;
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: 'assistant',
+              text: `현재 사진이 등록되지 않은 물건이 없거나 이미 모두 비움 처리되었습니다. 사진이 등록된 ${photoItems.length}개 물건은 안전하게 보관 중이에요! 😊`,
+              quickReplies: ['자주 쓰는 물건 정리 ⭐', '미분류 물건 배치 📍', '정리 완료 ✨'],
+              appliedChanges: [],
+            },
+          ]);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      // 3. 일반 정리 대화는 Gemini 모델 호출
       try {
         const result = await chatWithAgent(items, newMessages, userMsg);
-        const applied = applyActions(result.actions, userMsg);
+        const applied = applyActions(result.actions, userMsg, newMessages);
 
         setMessages((prev) => [
           ...prev,
@@ -269,7 +391,7 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
         setIsLoading(false);
       }
     },
-    [isLoading, messages, items, applyActions]
+    [isLoading, messages, items, applyActions, hasPhoto, updateMultipleItems, updateItem]
   );
 
   const handleKeyDown = (e) => {
