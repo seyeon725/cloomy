@@ -401,8 +401,6 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
     }
   };
 
-  const noPhotoItemsCount = items.filter((i) => !hasPhoto(i) && i.status !== 'discarded').length;
-
   if (!isStarted) {
     return (
       <div className="flex flex-col items-center justify-center gap-6 py-16 sm:py-24 px-6 text-center bg-white rounded-[32px] shadow-[0_12px_36px_rgba(74,62,61,0.06)] border border-[#F4EEEA] w-full">
@@ -420,34 +418,16 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
             ⚠️ 먼저 물건을 스캔해서 등록해주세요!
           </p>
         ) : (
-          <div className="flex flex-col sm:flex-row items-center gap-3">
-            <button
-              type="button"
-              onClick={startChat}
-              className="fluffy-button px-7 py-3.5 bg-[#FFB7B2] hover:bg-[#FFA59E] text-[#4A3E3D] font-extrabold text-base shadow-[0_12px_28px_rgba(255,183,178,0.45)] flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-            >
-              <span>🗣️ 초간결 정리 상담 시작</span>
-              <span className="text-xs font-semibold bg-white/60 px-2.5 py-0.5 rounded-full">
-                {items.length}개 물건
-              </span>
-            </button>
-
-            {noPhotoItemsCount > 0 && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsStarted(true);
-                  handleSendText('사진 등록 안 된 것들 비움으로 보내줘');
-                }}
-                className="fluffy-button px-6 py-3.5 bg-[#FFE9E7] hover:bg-[#FFD3CF] text-[#B55B59] font-extrabold text-sm border border-[#FFD3CF] shadow-xs flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer"
-              >
-                <span>📸 사진 없는 물건 일괄 비우기</span>
-                <span className="text-xs font-black bg-white/80 px-2 py-0.5 rounded-full text-[#B55B59]">
-                  {noPhotoItemsCount}개
-                </span>
-              </button>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={startChat}
+            className="fluffy-button px-8 py-4 bg-[#FFB7B2] hover:bg-[#FFA59E] text-[#4A3E3D] font-extrabold text-lg shadow-[0_12px_28px_rgba(255,183,178,0.45)] flex items-center gap-2 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+          >
+            <span>🗣️ 초간결 정리 상담 시작</span>
+            <span className="text-sm font-semibold bg-white/60 px-2.5 py-0.5 rounded-full">
+              {items.length}개 물건
+            </span>
+          </button>
         )}
       </div>
     );
@@ -459,25 +439,10 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
   return (
     <div className="flex flex-col h-[calc(100dvh-13rem)] bg-white rounded-[32px] shadow-[0_12px_36px_rgba(74,62,61,0.08)] border border-[#F2ECE6] overflow-hidden w-full">
       {/* Top Action Bar */}
-      <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-[#F2ECE6] text-xs gap-2">
-        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
-          <span className="font-bold text-[#806F6D] shrink-0 flex items-center gap-1.5">
-            <span>🧹</span> <span>AI 실시간 정리</span>
-          </span>
-          {noPhotoItemsCount > 0 && (
-            <button
-              type="button"
-              onClick={() => handleSendText('사진 등록 안 된 것들 비움으로 보내줘')}
-              className="shrink-0 px-2.5 py-1 rounded-full font-bold text-[#B55B59] bg-[#FFE9E7] hover:bg-[#FFD3CF] border border-[#FFD3CF] transition-colors flex items-center gap-1 cursor-pointer"
-              title="사진이 등록되지 않은 물건들만 모아서 비웁니다."
-            >
-              <span>📸 사진 없는 물건 비우기</span>
-              <span className="text-[10px] font-black bg-white px-1.5 py-0.2 rounded-full">
-                {noPhotoItemsCount}
-              </span>
-            </button>
-          )}
-        </div>
+      <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-[#F2ECE6] text-xs">
+        <span className="font-bold text-[#806F6D] flex items-center gap-1.5">
+          <span>🧹</span> <span>AI 실시간 정리</span>
+        </span>
         <button
           type="button"
           onClick={handleResetChat}
