@@ -251,7 +251,7 @@ export default function App() {
             등록 물건 {itemsHook.items.length}개
           </span>
 
-          {/* 클라우드 연동 및 백업 아이콘 버튼 (연동 시 연두빛, 미연동 시 빨간빛) */}
+          {/* 클라우드 연동 및 백업 아이콘 버튼 */}
           <button
             type="button"
             onClick={() => setShowRecoveryModal(true)}
@@ -260,6 +260,10 @@ export default function App() {
                 ? 'bg-[#EAF5EC] hover:bg-[#DDF2E1] border-[#B7E4C7] text-[#2E7D32]'
                 : isSyncing
                 ? 'bg-[#FFFBEB] hover:bg-[#FEF3C7] border-[#FDE68A] text-[#D97706]'
+                : !isLoggedIn
+                ? 'bg-[#F7F4F0] hover:bg-[#EFEAE4] border-[#E2DAD4] text-[#8F5E4D]'
+                : syncStatus === 'permission_denied'
+                ? 'bg-[#FFF0EE] hover:bg-[#FFE5E0] border-[#FFCCD2] text-[#E5484D]'
                 : 'bg-[#FFF0EE] hover:bg-[#FFE5E0] border-[#FFCCD2] text-[#E5484D]'
             }`}
             title={
@@ -267,6 +271,8 @@ export default function App() {
                 ? '🟢 클라우드 실시간 연동 완료 (모바일/PC 동기화 중)'
                 : isSyncing
                 ? '🔄 클라우드 실시간 동기화 진행 중...'
+                : !isLoggedIn
+                ? '☁️ 브라우저 로컬에 안전하게 보관 중 (클릭하여 Google 로그인 & 실시간 연동)'
                 : syncStatus === 'permission_denied'
                 ? '⚠️ 클라우드 설정 필요 (Firestore 보안 규칙 설정)'
                 : '🔴 클라우드 미연동 (클릭하여 모바일/PC 실시간 연동하기)'
@@ -281,6 +287,8 @@ export default function App() {
                   ? '#A5D6A7'
                   : isSyncing
                   ? '#FDE68A'
+                  : !isLoggedIn
+                  ? '#D5C8C3'
                   : '#FFCDD2'
               }
               fillOpacity={0.45}

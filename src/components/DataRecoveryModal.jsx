@@ -15,6 +15,8 @@ export default function DataRecoveryModal({
   const [message, setMessage] = useState('');
   const [copiedRule, setCopiedRule] = useState(false);
   const [showRuleGuide, setShowRuleGuide] = useState(syncStatus === 'permission_denied');
+  const [snapshotInfo, setSnapshotInfo] = useState(null);
+  const [detectedBackups, setDetectedBackups] = useState([]);
   const fileInputRef = useRef(null);
 
   const isLoggedIn = user && !user.isGuest;
@@ -26,7 +28,62 @@ export default function DataRecoveryModal({
     if (syncStatus === 'permission_denied') {
       setShowRuleGuide(true);
     }
-  }, [isOpen, syncStatus]);
+
+    // 1. 직전 스냅샷 감지
+    try {
+      const rawSnap = localStorage.getItem('cloomy_items_snapshot_prev');
+      if (rawSnap) {
+        const parsed = JSON.parse(rawSnap);
+        if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+          const timeStr = parsed.timestamp
+            ? new Date(parsed.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            : '';
+          setSnapshotInfo({
+            count: parsed.items.length,
+            time: timeStr,
+            items: parsed.items,
+          });
+        } else {
+          setSnapshotInfo(null);
+        }
+      } else {
+        setSnapshotInfo(null);
+      }
+    } catch {
+      setSnapshotInfo(null);
+    }
+
+    // 2. 브라우저 내 보관된 다른 로컬 키 탐색 (원클릭 복원 지원)
+    try {
+      const found = [];
+      const currentUserKey = isLoggedIn ? `cloomy_items_${user.uid}` : 'cloomy_items';
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (
+          k &&
+          (k.startsWith('cloomy_items') || k.startsWith('jeongnijjang_items')) &&
+          k !== 'cloomy_items_snapshot_prev'
+        ) {
+          try {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                const label =
+                  k === currentUserKey
+                    ? '현재 활성 작업 데이터'
+                    : k === 'cloomy_items'
+                    ? '게스트 로컬 저장소'
+                    : `로컬 보관 데이터 (${k})`;
+                found.push({ key: k, label, count: parsed.length, items: parsed });
+              }
+            }
+          } catch {}
+        }
+      }
+      setDetectedBackups(found);
+    } catch {}
+  }, [isOpen, syncStatus, isLoggedIn, user?.uid]);
 
   if (!isOpen) return null;
 
@@ -136,6 +193,30 @@ service cloud.firestore {
     e.target.value = '';
   };
 
+  const handleRestoreSnapshot = () => {
+    if (!snapshotInfo?.items) return;
+    if (itemsHook?.setItems) {
+      itemsHook.setItems(snapshotInfo.items);
+      const userKey = isLoggedIn ? `cloomy_items_${user.uid}` : 'cloomy_items';
+      try {
+        localStorage.setItem(userKey, JSON.stringify(snapshotInfo.items));
+      } catch {}
+      setMessage(`직전 작업 상태(물건 ${snapshotInfo.count}개)로 성공적으로 복구되었습니다! ✨`);
+    }
+  };
+
+  const handleRestoreDetected = (backup) => {
+    if (!backup?.items) return;
+    if (itemsHook?.setItems) {
+      itemsHook.setItems(backup.items);
+      const userKey = isLoggedIn ? `cloomy_items_${user.uid}` : 'cloomy_items';
+      try {
+        localStorage.setItem(userKey, JSON.stringify(backup.items));
+      } catch {}
+      setMessage(`${backup.label}(물건 ${backup.count}개) 데이터로 성공적으로 복원되었습니다! ✨`);
+    }
+  };
+
   const handleResetAll = () => {
     if (
       !window.confirm(
@@ -224,6 +305,60 @@ service cloud.firestore {
         {message && (
           <div className="p-3 mb-4 rounded-2xl bg-[#EAF5EC] border border-[#D4ECD8] text-[#3D7C4F] text-xs font-bold leading-relaxed">
             {message}
+          </div>
+        )}
+
+        {/* 0. 직전 로컬 작업 복구 섹션 (새로고침 등 롤백 발생 시 1초 복구) */}
+        {(snapshotInfo ||
+          detectedBackups.some(
+            (b) => b.key !== (isLoggedIn ? `cloomy_items_${user.uid}` : 'cloomy_items')
+          )) && (
+          <div className="mb-4 p-4 rounded-2xl bg-[#FFFBF0] border border-[#FDE68A] shadow-xs">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="text-xs font-black text-[#B45309] uppercase tracking-wider flex items-center gap-1.5">
+                <span>🔄</span> 직전 작업 1초 복구
+              </h4>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#92400E]">
+                작업 백업 감지됨
+              </span>
+            </div>
+            <p className="text-[11px] text-[#78350F] mb-3 leading-relaxed">
+              새로고침(F5) 등으로 작업하던 내용이 되돌아갔다면, 아래 버튼을 눌러 직전 상태로 즉시 복원할 수 있습니다.
+            </p>
+
+            {snapshotInfo && (
+              <button
+                type="button"
+                onClick={handleRestoreSnapshot}
+                className="w-full mb-2 py-2.5 px-3 rounded-xl bg-[#D97706] hover:bg-[#B45309] text-white text-xs font-bold transition-all cursor-pointer shadow-xs flex items-center justify-center gap-2"
+              >
+                <span>🔄</span>
+                <span>
+                  직전 작업 복원하기 ({snapshotInfo.time ? `${snapshotInfo.time}, ` : ''}물건 {snapshotInfo.count}개)
+                </span>
+              </button>
+            )}
+
+            {detectedBackups
+              .filter((b) => b.key !== (isLoggedIn ? `cloomy_items_${user.uid}` : 'cloomy_items'))
+              .map((backup) => (
+                <div
+                  key={backup.key}
+                  className="flex items-center justify-between p-2 rounded-xl bg-white/80 border border-[#FDE68A] mt-1.5"
+                >
+                  <div className="min-w-0 pr-2">
+                    <span className="text-xs font-bold text-[#4A3E3D] block truncate">{backup.label}</span>
+                    <span className="text-[10px] text-[#9A8784]">물건 {backup.count}개 보관 중</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleRestoreDetected(backup)}
+                    className="shrink-0 px-2.5 py-1 rounded-lg bg-[#FAF8F5] hover:bg-[#FAF0E6] text-[#B45309] border border-[#FDE68A] text-xs font-bold cursor-pointer transition-colors"
+                  >
+                    이 데이터로 복원
+                  </button>
+                </div>
+              ))}
           </div>
         )}
 

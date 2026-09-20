@@ -13,77 +13,57 @@ function storageKey(userId) {
 }
 
 function loadItems(userId) {
-  const allFound = [];
-  const idMap = new Map();
-
-  const addParsed = (parsed, isPrimary = false) => {
-    if (Array.isArray(parsed)) {
-      parsed.forEach((item) => {
-        if (!item || !item.id) return;
-        if (!idMap.has(item.id)) {
-          idMap.set(item.id, item);
-          allFound.push(item);
-        } else if (isPrimary) {
-          // 최우선 키(현재 사용자 데이터)는 무조건 우선 적용
-          const existingIdx = allFound.findIndex((i) => i.id === item.id);
-          if (existingIdx !== -1) {
-            allFound[existingIdx] = item;
-          }
-          idMap.set(item.id, item);
-        } else {
-          // 보조 키와의 병합 시 updatedAt이 더 최신인 경우만 업데이트
-          const existing = idMap.get(item.id);
-          const existingTime = existing?.updatedAt ? new Date(existing.updatedAt).getTime() : 0;
-          const incomingTime = item?.updatedAt ? new Date(item.updatedAt).getTime() : 0;
-          if (incomingTime > existingTime && incomingTime > 0) {
-            const existingIdx = allFound.findIndex((i) => i.id === item.id);
-            if (existingIdx !== -1) {
-              allFound[existingIdx] = item;
-            }
-            idMap.set(item.id, item);
-          }
-        }
-      });
-    }
-  };
-
+  const userKey = storageKey(userId);
   try {
-    // 1. 현재 사용자 키 (최우선 순위)
-    const userKey = storageKey(userId);
-    const userData = localStorage.getItem(userKey);
-    if (userData) addParsed(JSON.parse(userData), true);
+    const rawUser = localStorage.getItem(userKey);
+    if (rawUser !== null) {
+      const parsed = JSON.parse(rawUser);
+      if (Array.isArray(parsed)) {
+        return parsed;
+      }
+    }
 
-    // 2. 게스트 키 (게스트 상태에서 등록했던 물건 누락 방지 및 마이그레이션)
+    // userKey에 아직 데이터가 없는 첫 로그인 상태일 때만 게스트 키에서 1회 마이그레이션
     if (userKey !== BASE_KEY) {
       const guestData = localStorage.getItem(BASE_KEY);
-      if (guestData) addParsed(JSON.parse(guestData), false);
-    }
-
-    // 3. 브라우저 내 다른 모든 cloomy_items_* 키 탐색하여 누락된 물건 복원
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i);
-      if (
-        k &&
-        (k.startsWith('cloomy_items') || k.startsWith('jeongnijjang_items')) &&
-        k !== userKey &&
-        k !== BASE_KEY
-      ) {
-        try {
-          const raw = localStorage.getItem(k);
-          if (raw) addParsed(JSON.parse(raw), false);
-        } catch {}
+      if (guestData) {
+        const parsedGuest = JSON.parse(guestData);
+        if (Array.isArray(parsedGuest) && parsedGuest.length > 0) {
+          try {
+            localStorage.setItem(userKey, JSON.stringify(parsedGuest));
+          } catch {}
+          return parsedGuest;
+        }
       }
     }
   } catch (err) {
     console.warn('[useItems] loadItems 로드 중 에러:', err);
   }
 
-  return allFound;
+  return [];
 }
 
 function saveItems(items, userId) {
   const key = storageKey(userId);
   try {
+    // 직전 상태 1개를 임시 스냅샷으로 보존 (더미 누적 방지: 항상 단 1개만 덮어씀)
+    const existing = localStorage.getItem(key);
+    if (existing) {
+      try {
+        const prevList = JSON.parse(existing);
+        if (Array.isArray(prevList) && prevList.length > 0) {
+          localStorage.setItem(
+            'cloomy_items_snapshot_prev',
+            JSON.stringify({
+              timestamp: Date.now(),
+              userId,
+              items: prevList,
+            })
+          );
+        }
+      } catch {}
+    }
+
     // 거대한 원본 사진(photoUrl)은 제외하고, 최적화된 썸네일(imageUrl)과 메타데이터 저장
     const sanitized = items.map(({ photoUrl, ...rest }) => rest);
     localStorage.setItem(key, JSON.stringify(sanitized));
@@ -248,6 +228,22 @@ export function useItems(userId) {
     return { total, active, archived, discarded, trading, categories, locations, usages };
   }, [items]);
 
+  const restorePreviousSnapshot = useCallback(() => {
+    try {
+      const raw = localStorage.getItem('cloomy_items_snapshot_prev');
+      if (!raw) return false;
+      const parsed = JSON.parse(raw);
+      if (parsed && Array.isArray(parsed.items) && parsed.items.length > 0) {
+        setItems(parsed.items);
+        saveItems(parsed.items, userId);
+        return true;
+      }
+    } catch (err) {
+      console.error('[useItems] 직전 스냅샷 복원 실패:', err);
+    }
+    return false;
+  }, [userId]);
+
   return {
     items,
     setItems,
@@ -260,5 +256,6 @@ export function useItems(userId) {
     getItemsByLocation,
     getLocations,
     getStats,
+    restorePreviousSnapshot,
   };
 }
