@@ -53,15 +53,6 @@ function loadItems(userId) {
       }
     }
 
-    // 4. 로컬 분실 상태이거나 백업 데이터보다 적은 경우 자동 복구
-    if (allFound.length < (PRELOADED_RECOVERY_DATA?.items?.length || 0)) {
-      addParsed(PRELOADED_RECOVERY_DATA.items);
-      try {
-        localStorage.setItem(RECOVERY_FLAG, 'true');
-        localStorage.setItem(userKey, JSON.stringify(allFound));
-        localStorage.setItem(BASE_KEY, JSON.stringify(allFound));
-      } catch {}
-    }
   } catch {}
 
   return allFound;

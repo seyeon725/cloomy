@@ -16,6 +16,8 @@ const paths = {
   image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="8.5" cy="9" r="1" /><path d="m21 16-5-5L5 20" /></>,
   close: <><path d="M18 6 6 18M6 6l12 12" /></>,
   filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></>,
+  cloud: <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />,
+  cloudCheck: <><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /><path d="m9 13 2 2 4-4" /></>,
 };
 
 export default function Icon({ name, size = 20, strokeWidth = 1.8, className = '', label }) {

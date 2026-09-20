@@ -119,12 +119,10 @@ const loadRooms = (userId) => {
         ? parsedUser
         : parsedGuest;
 
-    // 만약 '안방'이 있거나, '거실'이 없거나, 12개 가구 배치가 아닌 구버전 데이터라면 최신 백업 데이터로 자동 마이그레이션
+    // 만약 이전 버전의 '안방'이 남아있는 브라우저라면 최신 '내 방' & '거실' 데이터로 1회 마이그레이션
     const hasAnbang = Array.isArray(source) && source.some(r => r.name === '안방');
-    const missingLivingRoom = Array.isArray(source) && !source.some(r => r.name === '거실');
-    const isOldFurnitureLayout = Array.isArray(source) && (source[0]?.furniture?.length || 0) < 12;
 
-    if ((!source || source.length <= 1 || hasAnbang || missingLivingRoom || isOldFurnitureLayout) && PRELOADED_RECOVERY_DATA?.rooms?.length > 0) {
+    if (hasAnbang && PRELOADED_RECOVERY_DATA?.rooms?.length > 0) {
       source = PRELOADED_RECOVERY_DATA.rooms;
       try {
         localStorage.setItem(roomsKey(userId), JSON.stringify(source));

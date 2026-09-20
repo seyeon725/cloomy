@@ -73,22 +73,18 @@ export function useCloudSync({ user, itemsHook, room }) {
         };
 
         const cloudItems = cloudData && Array.isArray(cloudData.items) ? cloudData.items : [];
-        let mergedItems = mergeItemsSafely(currentLocalItems, cloudItems);
-        if (mergedItems.length < (PRELOADED_RECOVERY_DATA?.items?.length || 0)) {
-          mergedItems = mergeItemsSafely(mergedItems, PRELOADED_RECOVERY_DATA.items);
-        }
+        const mergedItems = mergeItemsSafely(currentLocalItems, cloudItems);
 
-        // 방 목록도 더 많은 방을 보유한 쪽 우선 선택
+        // 방 목록 동기화: 클라우드에 데이터가 있으면 클라우드 방 목록 우선 (또는 로컬이 더 많을 시 로컬 유지)
         const cloudRooms = cloudData && Array.isArray(cloudData.rooms) ? cloudData.rooms : [];
         let mergedRooms =
-          currentLocalRooms.length >= cloudRooms.length ? currentLocalRooms : cloudRooms;
+          cloudRooms.length > 0
+            ? (currentLocalRooms.length > cloudRooms.length ? currentLocalRooms : cloudRooms)
+            : currentLocalRooms;
 
-        // 클라우드나 로컬에 '안방'이 있거나, '거실'이 없거나, 12개 가구 배치가 아닌 구버전 데이터라면 최신 12개 가구 및 '거실'로 교체
+        // 구버전 '안방'이 감지된 경우에만 호환 마이그레이션
         const hasAnbang = mergedRooms.some(r => r.name === '안방');
-        const missingLivingRoom = !mergedRooms.some(r => r.name === '거실');
-        const isOldLayout = (mergedRooms[0]?.furniture?.length || 0) < 12;
-
-        if ((hasAnbang || missingLivingRoom || isOldLayout || mergedRooms.length < 2) && PRELOADED_RECOVERY_DATA?.rooms?.length > 0) {
+        if (hasAnbang && PRELOADED_RECOVERY_DATA?.rooms?.length > 0) {
           mergedRooms = PRELOADED_RECOVERY_DATA.rooms;
         }
 
