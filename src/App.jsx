@@ -38,25 +38,38 @@ export default function App() {
   const clearPendingNotice = useCallback(() => setPendingNotice(''), []);
 
   const handleQuickRestore = useCallback(() => {
-    itemsHook.setItems(PRELOADED_RECOVERY_DATA.items);
-    room.setRooms(PRELOADED_RECOVERY_DATA.rooms);
-    room.setActiveRoomId(PRELOADED_RECOVERY_DATA.activeRoomId);
-
-    const userKey = user && !user.isGuest ? `cloomy_items_${user.uid}` : 'cloomy_items';
-    const userRoomKey = user && !user.isGuest ? `cloomy_rooms_${user.uid}` : 'cloomy_rooms';
-    const activeKey = user && !user.isGuest ? `cloomy_active_room_id_${user.uid}` : 'cloomy_active_room_id';
-
     try {
-      localStorage.setItem(userKey, JSON.stringify(PRELOADED_RECOVERY_DATA.items));
-      localStorage.setItem('cloomy_items', JSON.stringify(PRELOADED_RECOVERY_DATA.items));
-      localStorage.setItem(userRoomKey, JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
-      localStorage.setItem('cloomy_rooms', JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
-      localStorage.setItem(activeKey, PRELOADED_RECOVERY_DATA.activeRoomId);
-      localStorage.setItem('cloomy_active_room_id', PRELOADED_RECOVERY_DATA.activeRoomId);
-      localStorage.setItem('cloomy_auto_recovered_v1', 'true');
-    } catch {}
+      if (itemsHook?.setItems) {
+        itemsHook.setItems(PRELOADED_RECOVERY_DATA.items);
+      }
+      if (room?.setRooms) {
+        room.setRooms(PRELOADED_RECOVERY_DATA.rooms);
+      }
+      if (room?.setActiveRoomId) {
+        room.setActiveRoomId(PRELOADED_RECOVERY_DATA.activeRoomId);
+      }
 
-    alert(`물건 ${PRELOADED_RECOVERY_DATA.items.length}개와 방 2개('내 방', '안방')가 즉시 복원되었습니다! 🎉`);
+      const userKey = user && !user.isGuest ? `cloomy_items_${user.uid}` : 'cloomy_items';
+      const userRoomKey = user && !user.isGuest ? `cloomy_rooms_${user.uid}` : 'cloomy_rooms';
+      const activeKey = user && !user.isGuest ? `cloomy_active_room_id_${user.uid}` : 'cloomy_active_room_id';
+
+      try {
+        localStorage.setItem(userKey, JSON.stringify(PRELOADED_RECOVERY_DATA.items));
+        localStorage.setItem('cloomy_items', JSON.stringify(PRELOADED_RECOVERY_DATA.items));
+        localStorage.setItem(userRoomKey, JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
+        localStorage.setItem('cloomy_rooms', JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
+        localStorage.setItem(activeKey, PRELOADED_RECOVERY_DATA.activeRoomId);
+        localStorage.setItem('cloomy_active_room_id', PRELOADED_RECOVERY_DATA.activeRoomId);
+        localStorage.setItem('cloomy_auto_recovered_v1', 'true');
+      } catch (err) {
+        console.warn('localStorage 저장 경고:', err);
+      }
+
+      alert(`물건 ${PRELOADED_RECOVERY_DATA.items.length}개와 방 2개('내 방', '안방')가 즉시 복원되었습니다! 🎉`);
+    } catch (e) {
+      console.error('Quick restore error:', e);
+      alert(`복원 중 오류가 발생했습니다: ${e?.message || e}`);
+    }
   }, [user, itemsHook, room]);
 
   // 미저장 작업 중 브라우저 새로고침/종료 방지

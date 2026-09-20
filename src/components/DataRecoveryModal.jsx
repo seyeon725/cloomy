@@ -44,29 +44,42 @@ export default function DataRecoveryModal({ isOpen, onClose, itemsHook, room, us
 
   const handleRestorePreloaded = async () => {
     try {
-      itemsHook.setItems(PRELOADED_RECOVERY_DATA.items);
-      room.setRooms(PRELOADED_RECOVERY_DATA.rooms);
-      room.setActiveRoomId(PRELOADED_RECOVERY_DATA.activeRoomId);
+      if (itemsHook?.setItems) {
+        itemsHook.setItems(PRELOADED_RECOVERY_DATA.items);
+      }
+      if (room?.setRooms) {
+        room.setRooms(PRELOADED_RECOVERY_DATA.rooms);
+      }
+      if (room?.setActiveRoomId) {
+        room.setActiveRoomId(PRELOADED_RECOVERY_DATA.activeRoomId);
+      }
 
       const userKey = user && !user.isGuest ? `cloomy_items_${user.uid}` : 'cloomy_items';
       const userRoomKey = user && !user.isGuest ? `cloomy_rooms_${user.uid}` : 'cloomy_rooms';
       const activeKey = user && !user.isGuest ? `cloomy_active_room_id_${user.uid}` : 'cloomy_active_room_id';
 
-      localStorage.setItem(userKey, JSON.stringify(PRELOADED_RECOVERY_DATA.items));
-      localStorage.setItem('cloomy_items', JSON.stringify(PRELOADED_RECOVERY_DATA.items));
-      localStorage.setItem(userRoomKey, JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
-      localStorage.setItem('cloomy_rooms', JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
-      localStorage.setItem(activeKey, PRELOADED_RECOVERY_DATA.activeRoomId);
-      localStorage.setItem('cloomy_active_room_id', PRELOADED_RECOVERY_DATA.activeRoomId);
-      localStorage.setItem('cloomy_auto_recovered_v1', 'true');
+      try {
+        localStorage.setItem(userKey, JSON.stringify(PRELOADED_RECOVERY_DATA.items));
+        localStorage.setItem('cloomy_items', JSON.stringify(PRELOADED_RECOVERY_DATA.items));
+        localStorage.setItem(userRoomKey, JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
+        localStorage.setItem('cloomy_rooms', JSON.stringify(PRELOADED_RECOVERY_DATA.rooms));
+        localStorage.setItem(activeKey, PRELOADED_RECOVERY_DATA.activeRoomId);
+        localStorage.setItem('cloomy_active_room_id', PRELOADED_RECOVERY_DATA.activeRoomId);
+        localStorage.setItem('cloomy_auto_recovered_v1', 'true');
+      } catch (storageErr) {
+        console.warn('localStorage 저장 경고:', storageErr);
+      }
 
       if (user && !user.isGuest) {
-        saveCloudData(user.uid, PRELOADED_RECOVERY_DATA).catch(() => {});
+        saveCloudData(user.uid, PRELOADED_RECOVERY_DATA).catch((cloudErr) => {
+          console.warn('클라우드 저장 대기:', cloudErr);
+        });
       }
 
       setMessage(`전체 물건 ${PRELOADED_RECOVERY_DATA.items.length}개와 방 2개('내 방', '안방')가 완벽히 복원되었습니다! 🎉`);
     } catch (e) {
-      setMessage('복원 중 오류가 발생했습니다.');
+      console.error('복원 에러 상세:', e);
+      setMessage(`복원 중 오류가 발생했습니다: ${e?.message || e}`);
     }
   };
 
@@ -89,7 +102,7 @@ service cloud.firestore {
     if (Array.isArray(entry.data) && entry.data.length > 0) {
       const first = entry.data[0];
       if (first && (first.name || first.category || first.location)) {
-        itemsHook.setItems(entry.data);
+        if (itemsHook?.setItems) itemsHook.setItems(entry.data);
         const userKey = user && !user.isGuest ? `cloomy_items_${user.uid}` : 'cloomy_items';
         try {
           localStorage.setItem(userKey, JSON.stringify(entry.data));
@@ -97,7 +110,7 @@ service cloud.firestore {
         } catch {}
         setMessage(`물건 ${entry.data.length}개를 성공적으로 복원했어요!`);
       } else if (first && first.furniture) {
-        room.setRooms(entry.data);
+        if (room?.setRooms) room.setRooms(entry.data);
         const userRoomKey = user && !user.isGuest ? `cloomy_rooms_${user.uid}` : 'cloomy_rooms';
         try {
           localStorage.setItem(userRoomKey, JSON.stringify(entry.data));
@@ -124,7 +137,7 @@ service cloud.firestore {
       const parsed = JSON.parse(importText.trim());
       let count = 0;
       if (parsed.items && Array.isArray(parsed.items)) {
-        itemsHook.setItems(parsed.items);
+        if (itemsHook?.setItems) itemsHook.setItems(parsed.items);
         const userKey = user && !user.isGuest ? `cloomy_items_${user.uid}` : 'cloomy_items';
         try {
           localStorage.setItem(userKey, JSON.stringify(parsed.items));
@@ -133,7 +146,7 @@ service cloud.firestore {
         count = parsed.items.length;
       }
       if (parsed.rooms && Array.isArray(parsed.rooms)) {
-        room.setRooms(parsed.rooms);
+        if (room?.setRooms) room.setRooms(parsed.rooms);
         const userRoomKey = user && !user.isGuest ? `cloomy_rooms_${user.uid}` : 'cloomy_rooms';
         try {
           localStorage.setItem(userRoomKey, JSON.stringify(parsed.rooms));

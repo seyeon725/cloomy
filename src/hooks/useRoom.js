@@ -268,6 +268,7 @@ export function useRoom(userId) {
 
   return {
     rooms,
+    setRooms,
     activeRoomId: activeRoom.id,
     activeRoom,
     setActiveRoomId,
