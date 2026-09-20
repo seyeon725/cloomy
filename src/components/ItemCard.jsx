@@ -89,7 +89,7 @@ export default function ItemCard({
       <>
         <div
           onClick={handleCardClick}
-          className={`fluffy-card p-3 sm:p-4 transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(74,62,61,0.1)] flex flex-col justify-between h-full min-h-[285px] sm:min-h-[305px] bg-white relative border group cursor-pointer ${
+          className={`fluffy-card p-2.5 sm:p-3 transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_rgba(74,62,61,0.1)] flex flex-col justify-between h-full min-h-[250px] sm:min-h-[265px] bg-white relative border group cursor-pointer ${
             isSelected
               ? 'ring-2 ring-[#B56562] bg-[#FFF9F7] border-[#FFB7B2] shadow-sm'
               : 'border-[#F6EFEA]'
@@ -112,7 +112,7 @@ export default function ItemCard({
 
           <div className="flex flex-col flex-1">
             {/* 썸네일 / 이모지 영역 */}
-            <div className="w-full h-28 sm:h-32 rounded-xl bg-gradient-to-b from-[#FFF8F5] to-[#FFF1EB] border border-[#F2ECE6] relative overflow-hidden flex items-center justify-center mb-2.5 shrink-0">
+            <div className="w-full h-24 sm:h-28 rounded-xl bg-gradient-to-b from-[#FFF8F5] to-[#FFF1EB] border border-[#F2ECE6] relative overflow-hidden flex items-center justify-center mb-2 shrink-0">
               {!imgError && item.imageUrl ? (
                 <img
                   src={item.imageUrl}
@@ -121,15 +121,15 @@ export default function ItemCard({
                   onError={() => setImgError(true)}
                 />
               ) : (
-                <span className="text-4xl sm:text-5xl drop-shadow-xs transition-transform group-hover:scale-110 select-none">
+                <span className="text-3xl sm:text-4xl drop-shadow-xs transition-transform group-hover:scale-110 select-none">
                   {emoji}
                 </span>
               )}
 
               {/* 카테고리 뱃지 (상단 좌측 오버레이) */}
               <span
-                className={`absolute text-[11px] font-bold text-[#B56562] bg-white/95 backdrop-blur-xs px-2 py-0.5 rounded-full shadow-xs border border-[#FFDCD6] ${
-                  isSelectMode ? 'top-2.5 left-9' : 'top-2.5 left-2.5'
+                className={`absolute text-[10px] sm:text-[11px] font-bold text-[#B56562] bg-white/95 backdrop-blur-xs px-1.5 py-0.5 rounded-full shadow-xs border border-[#FFDCD6] ${
+                  isSelectMode ? 'top-2 left-8' : 'top-2 left-2'
                 }`}
               >
                 {item.category}
@@ -144,15 +144,15 @@ export default function ItemCard({
                     setIsEditing(true);
                   }}
                   title="수정하기"
-                  className="absolute top-2.5 right-2.5 p-1.5 rounded-full bg-white/95 text-[#9A8784] hover:text-[#B56562] shadow-xs hover:bg-white transition-all"
+                  className="absolute top-2 right-2 p-1.5 rounded-full bg-white/95 text-[#9A8784] hover:text-[#B56562] shadow-xs hover:bg-white transition-all"
                 >
-                  <Icon name="pencil" size={13} />
+                  <Icon name="pencil" size={12} />
                 </button>
               )}
             </div>
 
             {/* 물건 이름: 2줄 규격 높이 */}
-            <div className="min-h-[2.4rem] flex items-center">
+            <div className="min-h-[2.2rem] flex items-center">
               <h3
                 className="text-xs sm:text-sm font-bold text-[#4A3E3D] break-words line-clamp-2 leading-snug"
                 title={item.name}
@@ -162,15 +162,15 @@ export default function ItemCard({
             </div>
 
             {/* 위치 & 크기 칩 */}
-            <div className="flex flex-wrap items-center gap-1 mt-2 min-h-[1.5rem]">
+            <div className="flex flex-wrap items-center gap-1 mt-1.5 min-h-[1.4rem]">
               <span
-                className="text-[10px] sm:text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE] truncate max-w-full flex items-center gap-1"
+                className="text-[10px] sm:text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE] truncate max-w-full flex items-center gap-1"
                 title={item.location || '미분류'}
               >
                 <Icon name="pin" size={10} className="shrink-0 text-[#B56562]" />
                 <span className="truncate">{item.location || '미분류'}</span>
               </span>
-              <span className="text-[10px] sm:text-[11px] font-medium px-2 py-0.5 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE]">
+              <span className="text-[10px] sm:text-[11px] font-medium px-1.5 py-0.5 rounded-full bg-[#FAF8F5] text-[#685957] border border-[#EDE5DE]">
                 📏 {sizeLabels[item.size] || item.size}
               </span>
               {item.status && item.status !== 'active' && (
@@ -186,8 +186,8 @@ export default function ItemCard({
           </div>
 
           {/* 하단 사용도 선택기 */}
-          <div className="mt-auto pt-2.5 border-t border-[#F5EFEA] flex items-center justify-between gap-1">
-            <span className="text-[11px] font-bold text-[#8A7977]">사용도</span>
+          <div className="mt-auto pt-2 border-t border-[#F5EFEA] flex items-center justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-[#8A7977]">사용도</span>
             <div className="inline-flex rounded-full bg-[#FAF8F5] p-0.5 border border-[#EDE5DE] gap-0.5">
               {Object.values(USAGE_CONFIG).map((cfg) => {
                 const isUsageSelected = (item.usage || 'frequent') === cfg.id;
@@ -199,7 +199,7 @@ export default function ItemCard({
                       e.stopPropagation();
                       handleUsageChange(cfg.id);
                     }}
-                    className={`w-6 h-6 rounded-full text-xs font-bold transition-all flex items-center justify-center ${
+                    className={`w-5.5 h-5.5 sm:w-6 sm:h-6 rounded-full text-[11px] sm:text-xs font-bold transition-all flex items-center justify-center ${
                       isUsageSelected
                         ? `${cfg.badgeClass} border shadow-xs scale-105`
                         : 'text-[#9C8B88] hover:text-[#4A3E3D] hover:bg-[#FFF0EE]'
