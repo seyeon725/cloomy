@@ -77,11 +77,15 @@ function DoorMarker({ door, selected, onSelect }) {
   </g>;
 }
 export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clearPendingNotice }) {
-  const { furniture, setFurniture, saveError } = room;
+  const { furniture, setFurniture, saveError, rooms = [], activeRoomId, setActiveRoomId, addRoom, renameRoom, deleteRoom, activeRoom } = room;
   const { items, updateItem, updateMultipleItems } = itemsHook;
   const [selectedId, setSelectedId] = useState(furniture[0]?.id);
   const [selectedIds, setSelectedIds] = useState(() => furniture[0]?.id ? [furniture[0].id] : []);
   const [slot, setSlot] = useState(0);
+  const [showAddRoomModal, setShowAddRoomModal] = useState(false);
+  const [newRoomName, setNewRoomName] = useState('');
+  const [editingRoomId, setEditingRoomId] = useState(null);
+  const [editRoomName, setEditRoomName] = useState('');
   const [editing, setEditing] = useState(false);
   const [query, setQuery] = useState('');
   const [adding, setAdding] = useState(false);
@@ -115,6 +119,12 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     setSelectedItemIds([]);
     setShowMoveModal(false);
   }, [selectedId, slot]);
+
+  useEffect(() => {
+    setSelectedId(furniture[0]?.id || null);
+    setSelectedIds(furniture[0]?.id ? [furniture[0].id] : []);
+    setSlot(0);
+  }, [activeRoomId]);
   const historyRef = useRef({ past: [], future: [], snapshot: JSON.stringify(furniture) });
   const [door, setDoor] = useState(() => {
     try {
@@ -657,7 +667,7 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
     <div className="room-heading">
       <div>
         <p className="room-eyebrow">MY LITTLE SPACE</p>
-        <h2>내 방, 한눈에</h2>
+        <h2>{activeRoom?.name || '내 방'}, 한눈에</h2>
         <p>방 안의 가구와 물건 위치를 한곳에서 찾아보세요.</p>
       </div>
       <div className="room-heading-actions">
@@ -671,6 +681,69 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
           <span>{editing ? '배치 완료' : '가구 배치하기'}</span>
         </button>
       </div>
+    </div>
+
+    {/* Room Switcher Tabs */}
+    <div className="flex items-center gap-2 overflow-x-auto pb-3 pt-1 scrollbar-none">
+      {rooms.map((r) => {
+        const isActive = r.id === activeRoomId;
+        return (
+          <div key={r.id} className="flex items-center">
+            <button
+              type="button"
+              onClick={() => setActiveRoomId && setActiveRoomId(r.id)}
+              className={`px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer whitespace-nowrap shadow-xs ${
+                isActive
+                  ? 'bg-[#B56562] text-white shadow-md scale-102'
+                  : 'bg-white text-[#705E5B] hover:bg-[#FFF2F0] border border-[#EFE8E3]'
+              }`}
+            >
+              {r.name}
+            </button>
+            {isActive && rooms.length > 1 && (
+              <div className="flex items-center gap-1 ml-1.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingRoomId(r.id);
+                    setEditRoomName(r.name);
+                  }}
+                  className="w-7 h-7 rounded-xl bg-white border border-[#EFE8E3] hover:bg-[#FFF2F0] text-[#9A8784] hover:text-[#B56562] flex items-center justify-center text-xs transition-all shadow-xs cursor-pointer"
+                  title="방 이름 변경"
+                >
+                  ✏️
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (confirm(`'${r.name}' 방을 정말 삭제하시겠습니까?`)) {
+                      deleteRoom && deleteRoom(r.id);
+                      showToast(`'${r.name}' 방을 삭제했어요.`);
+                    }
+                  }}
+                  className="w-7 h-7 rounded-xl bg-white border border-[#EFE8E3] hover:bg-[#FFEAE8] text-[#9A8784] hover:text-red-500 flex items-center justify-center text-xs transition-all shadow-xs cursor-pointer"
+                  title="방 삭제"
+                >
+                  🗑️
+                </button>
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* + 방 추가 버튼 */}
+      <button
+        type="button"
+        onClick={() => {
+          setNewRoomName('');
+          setShowAddRoomModal(true);
+        }}
+        className="px-3.5 py-2 rounded-2xl text-xs sm:text-sm font-extrabold text-[#B56562] bg-[#FFF0EE] hover:bg-[#FFE5E0] border border-[#FFD5CF] flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer active:scale-95 shadow-xs"
+      >
+        <span>+</span>
+        <span>방 추가</span>
+      </button>
     </div>
     {saveError && <p role="alert">{saveError}</p>}
     <div className="room-stats">
@@ -891,6 +964,120 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
         onSelectFurniture={handleSelectFurnitureFromSummary}
         onClose={() => setShowPlacedModal(false)}
       />
+    )}
+
+    {/* 방 추가 모달 */}
+    {showAddRoomModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 backdrop-blur-xs px-4" onClick={() => setShowAddRoomModal(false)}>
+        <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-[fadeIn_0.15s_ease-out]" onClick={e => e.stopPropagation()}>
+          <h3 className="text-base font-black text-[#4A3E3D] mb-1">새로운 방 추가</h3>
+          <p className="text-xs text-[#9A8784] mb-4">관리할 방의 이름을 입력하거나 추천 방을 선택하세요.</p>
+
+          <div className="flex flex-wrap gap-1.5 mb-4">
+            {['거실', '침실', '서재', '드레스룸', '주방', '아이방'].map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setNewRoomName(preset)}
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  newRoomName === preset
+                    ? 'bg-[#B56562] text-white shadow-xs'
+                    : 'bg-[#FAF8F5] text-[#705E5B] hover:bg-[#FFF0EE]'
+                }`}
+              >
+                {preset}
+              </button>
+            ))}
+          </div>
+
+          <input
+            type="text"
+            value={newRoomName}
+            onChange={(e) => setNewRoomName(e.target.value)}
+            placeholder="예: 내 방 2, 옷방, 창고"
+            className="w-full px-4 py-3 rounded-2xl bg-[#FAF8F5] border border-[#E8E0DC] text-sm font-semibold text-[#4A3E3D] focus:outline-none focus:border-[#B56562] mb-4"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && newRoomName.trim()) {
+                addRoom && addRoom(newRoomName.trim());
+                setShowAddRoomModal(false);
+                showToast(`'${newRoomName.trim()}' 방이 추가되었어요!`);
+              }
+            }}
+          />
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowAddRoomModal(false)}
+              className="flex-1 py-3 rounded-2xl bg-[#FAF8F5] text-[#9A8784] font-bold text-sm hover:bg-[#F0ECE9] transition-all cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={!newRoomName.trim()}
+              onClick={() => {
+                if (!newRoomName.trim()) return;
+                addRoom && addRoom(newRoomName.trim());
+                setShowAddRoomModal(false);
+                showToast(`'${newRoomName.trim()}' 방이 추가되었어요!`);
+              }}
+              className="flex-1 py-3 rounded-2xl bg-[#B56562] text-white font-bold text-sm hover:bg-[#9E4E4B] transition-all disabled:opacity-40 cursor-pointer shadow-sm"
+            >
+              추가하기
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* 방 이름 수정 모달 */}
+    {editingRoomId && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 backdrop-blur-xs px-4" onClick={() => setEditingRoomId(null)}>
+        <div className="bg-white rounded-3xl p-6 w-full max-w-sm shadow-2xl animate-[fadeIn_0.15s_ease-out]" onClick={e => e.stopPropagation()}>
+          <h3 className="text-base font-black text-[#4A3E3D] mb-1">방 이름 변경</h3>
+          <p className="text-xs text-[#9A8784] mb-4">방의 새 이름을 입력해 주세요.</p>
+
+          <input
+            type="text"
+            value={editRoomName}
+            onChange={(e) => setEditRoomName(e.target.value)}
+            className="w-full px-4 py-3 rounded-2xl bg-[#FAF8F5] border border-[#E8E0DC] text-sm font-semibold text-[#4A3E3D] focus:outline-none focus:border-[#B56562] mb-4"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && editRoomName.trim()) {
+                renameRoom && renameRoom(editingRoomId, editRoomName.trim());
+                setEditingRoomId(null);
+                showToast('방 이름을 변경했어요.');
+              }
+            }}
+          />
+
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setEditingRoomId(null)}
+              className="flex-1 py-3 rounded-2xl bg-[#FAF8F5] text-[#9A8784] font-bold text-sm hover:bg-[#F0ECE9] transition-all cursor-pointer"
+            >
+              취소
+            </button>
+            <button
+              type="button"
+              disabled={!editRoomName.trim()}
+              onClick={() => {
+                if (!editRoomName.trim()) return;
+                renameRoom && renameRoom(editingRoomId, editRoomName.trim());
+                setEditingRoomId(null);
+                showToast('방 이름을 변경했어요.');
+              }}
+              className="flex-1 py-3 rounded-2xl bg-[#B56562] text-white font-bold text-sm hover:bg-[#9E4E4B] transition-all disabled:opacity-40 cursor-pointer shadow-sm"
+            >
+              변경 완료
+            </button>
+          </div>
+        </div>
+      </div>
     )}
   </div>;
 }

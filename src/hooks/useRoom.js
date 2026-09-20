@@ -69,13 +69,27 @@ export const findOpenPosition = (type, currentFurniture) => {
   }
   return null;
 };
-const roomKey = (userId) => {
+export const DEFAULT_DOOR = { offset: 6.8, reversed: false };
+export const ROOM_PRESETS = ['내 방', '거실', '침실', '서재', '드레스룸', '주방', '아이방'];
+
+const roomsKey = (userId) => {
+  if (!userId || userId === 'guest') return 'cloomy_rooms';
+  return `cloomy_rooms_${userId}`;
+};
+
+const activeRoomKey = (userId) => {
+  if (!userId || userId === 'guest') return 'cloomy_active_room_id';
+  return `cloomy_active_room_id_${userId}`;
+};
+
+const legacyRoomKey = (userId) => {
   if (!userId || userId === 'guest') return 'cloomy_room';
   return `cloomy_room_${userId}`;
 };
-const loadRoom = (userId) => {
+
+const loadLegacyFurniture = (userId) => {
   try {
-    const saved = JSON.parse(localStorage.getItem(roomKey(userId)));
+    const saved = JSON.parse(localStorage.getItem(legacyRoomKey(userId)));
     const insideRoomOnly = Array.isArray(saved) ? saved.filter(f => f.type !== 'shoeCabinet' && f.type !== 'floorStorage' && f.type !== 'vanity') : saved;
     if (Array.isArray(insideRoomOnly) && insideRoomOnly.every(f => FURNITURE[f.type] && typeof f.id === 'string' && typeof f.name === 'string' && Number.isFinite(f.x) && Number.isFinite(f.y))) {
       const migrated = insideRoomOnly.map(f => {
@@ -85,29 +99,161 @@ const loadRoom = (userId) => {
       });
       return separateFurniture(migrated);
     }
-  } catch { /* Use the starter layout if saved data is invalid. */ }
+  } catch {}
   return separateFurniture(initial);
 };
+
+const loadRooms = (userId) => {
+  try {
+    const raw = localStorage.getItem(roomsKey(userId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((r, i) => ({
+          id: r.id || `room-${i + 1}`,
+          name: r.name || (i === 0 ? '내 방' : `방 ${i + 1}`),
+          furniture: Array.isArray(r.furniture) ? separateFurniture(r.furniture) : (i === 0 ? separateFurniture(initial) : []),
+          door: r.door || DEFAULT_DOOR,
+        }));
+      }
+    }
+  } catch {}
+
+  const legacyFurniture = loadLegacyFurniture(userId);
+  const defaultRooms = [
+    {
+      id: 'room-1',
+      name: '내 방',
+      furniture: legacyFurniture,
+      door: DEFAULT_DOOR,
+    }
+  ];
+  try {
+    localStorage.setItem(roomsKey(userId), JSON.stringify(defaultRooms));
+  } catch {}
+  return defaultRooms;
+};
+
 export function useRoom(userId) {
-  const [furniture, setFurniture] = useState(() => loadRoom(userId));
+  const [rooms, setRooms] = useState(() => loadRooms(userId));
+  const [activeRoomId, setActiveRoomIdState] = useState(() => {
+    const saved = localStorage.getItem(activeRoomKey(userId));
+    if (saved && rooms.some(r => r.id === saved)) return saved;
+    return rooms[0]?.id || 'room-1';
+  });
   const [saveError, setSaveError] = useState('');
   const prevUserId = useRef(userId);
 
-  // userId 변경 시 해당 사용자의 방 배치 로드
   useEffect(() => {
     if (prevUserId.current !== userId) {
       prevUserId.current = userId;
-      setFurniture(loadRoom(userId));
+      const loaded = loadRooms(userId);
+      setRooms(loaded);
+      const saved = localStorage.getItem(activeRoomKey(userId));
+      if (saved && loaded.some(r => r.id === saved)) {
+        setActiveRoomIdState(saved);
+      } else {
+        setActiveRoomIdState(loaded[0]?.id || 'room-1');
+      }
     }
   }, [userId]);
 
+  const activeRoom = rooms.find(r => r.id === activeRoomId) || rooms[0] || {
+    id: 'room-1',
+    name: '내 방',
+    furniture: separateFurniture(initial),
+    door: DEFAULT_DOOR,
+  };
+
+  const furniture = activeRoom.furniture || [];
+
   useEffect(() => {
-    try { localStorage.setItem(roomKey(userId), JSON.stringify(furniture)); setSaveError(''); }
-    catch { setSaveError('방 배치를 저장하지 못했어요. 브라우저 저장 공간을 확인해주세요.'); }
-  }, [furniture, userId]);
+    try {
+      localStorage.setItem(roomsKey(userId), JSON.stringify(rooms));
+      localStorage.setItem(activeRoomKey(userId), activeRoom.id);
+      localStorage.setItem(legacyRoomKey(userId), JSON.stringify(furniture));
+      setSaveError('');
+    } catch {
+      setSaveError('방 배치를 저장하지 못했어요. 브라우저 저장 공간을 확인해주세요.');
+    }
+  }, [rooms, activeRoom.id, furniture, userId]);
+
+  const setFurniture = (action) => {
+    setRooms(prevRooms => {
+      return prevRooms.map(r => {
+        if (r.id === activeRoom.id) {
+          const nextFurn = typeof action === 'function' ? action(r.furniture || []) : action;
+          return { ...r, furniture: nextFurn };
+        }
+        return r;
+      });
+    });
+  };
+
+  const updateRoomFurniture = (roomId, action) => {
+    setRooms(prevRooms => {
+      return prevRooms.map(r => {
+        if (r.id === roomId) {
+          const nextFurn = typeof action === 'function' ? action(r.furniture || []) : action;
+          return { ...r, furniture: nextFurn };
+        }
+        return r;
+      });
+    });
+  };
+
+  const setActiveRoomId = (id) => {
+    setActiveRoomIdState(id);
+    try { localStorage.setItem(activeRoomKey(userId), id); } catch {}
+  };
+
+  const addRoom = (name) => {
+    const trimmed = (name || '').trim();
+    const newRoomName = trimmed || `방 ${rooms.length + 1}`;
+    const newId = `room-${Date.now()}`;
+    const newRoom = {
+      id: newId,
+      name: newRoomName,
+      furniture: [],
+      door: DEFAULT_DOOR,
+    };
+    const nextRooms = [...rooms, newRoom];
+    setRooms(nextRooms);
+    setActiveRoomIdState(newId);
+    try {
+      localStorage.setItem(roomsKey(userId), JSON.stringify(nextRooms));
+      localStorage.setItem(activeRoomKey(userId), newId);
+    } catch {}
+    return newRoom;
+  };
+
+  const renameRoom = (roomId, newName) => {
+    const trimmed = (newName || '').trim();
+    if (!trimmed) return;
+    setRooms(prev => prev.map(r => r.id === roomId ? { ...r, name: trimmed } : r));
+  };
+
+  const deleteRoom = (roomId) => {
+    if (rooms.length <= 1) return false;
+    const nextRooms = rooms.filter(r => r.id !== roomId);
+    setRooms(nextRooms);
+    if (activeRoomId === roomId) {
+      setActiveRoomIdState(nextRooms[0].id);
+    }
+    return true;
+  };
+
   return {
+    rooms,
+    activeRoomId: activeRoom.id,
+    activeRoom,
+    setActiveRoomId,
+    addRoom,
+    renameRoom,
+    deleteRoom,
     furniture,
     setFurniture,
+    updateRoomFurniture,
     saveError,
     locations: [
       FLOOR_LOCATION,
