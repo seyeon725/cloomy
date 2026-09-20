@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 import { recalibrateItemSizes } from '../services/gemini';
 import { FURNITURE, slotCount, slotName, FLOOR_LOCATION } from '../hooks/useRoom';
 import { USAGE_CONFIG } from '../hooks/useItems';
@@ -44,6 +44,35 @@ export default function ItemEditModal({
   const [size, setSize] = useState(item.size || 'small');
   const [description, setDescription] = useState(item.description || '');
   const [usage, setUsage] = useState(item.usage || 'frequent');
+  const [imageUrl, setImageUrl] = useState(item.imageUrl || '');
+  const fileInputRef = useRef(null);
+
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const targetSize = 220;
+        const w = img.width;
+        const h = img.height;
+        const minDim = Math.min(w, h);
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        const ctx = canvas.getContext('2d');
+        const sx = (w - minDim) / 2;
+        const sy = (h - minDim) / 2;
+        ctx.drawImage(img, sx, sy, minDim, minDim, 0, 0, targetSize, targetSize);
+        const compressed = canvas.toDataURL('image/jpeg', 0.8);
+        setImageUrl(compressed);
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(file);
+  };
+
   // 상대적 크기 재조정 프롬프트 상태
   const [showPrompt, setShowPrompt] = useState(false);
   const [isRecalibrating, setIsRecalibrating] = useState(false);
@@ -136,6 +165,7 @@ export default function ItemEditModal({
       description: description.trim(),
       location: finalLocation,
       usage,
+      imageUrl: imageUrl || null,
     };
   };
 
@@ -262,20 +292,57 @@ export default function ItemEditModal({
               </button>
             </div>
 
-            {/* 스캔된 사진 미리보기 (스캔 이미지 존재 시) */}
-            {item.imageUrl && (
-              <div className="flex items-center gap-3.5 p-3 bg-[#FAF8F5] rounded-2xl border border-[#F0E5DC]">
-                <img
-                  src={item.imageUrl}
-                  alt={name}
-                  className="w-16 h-16 rounded-xl object-cover border border-[#E8DDD4] shrink-0 shadow-xs"
-                />
-                <div className="text-xs text-[#806F6D]">
-                  <p className="font-extrabold text-[#4A3E3D] text-sm">📸 스캔된 사진</p>
-                  <p className="text-[11px] text-[#9A8784] mt-0.5">등록 시 촬영 및 업로드된 실제 이미지예요.</p>
+            {/* 사진 미리보기 및 등록/변경 영역 */}
+            <div className="flex items-center gap-3.5 p-3.5 bg-[#FAF8F5] rounded-2xl border border-[#F0E5DC]">
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept="image/*"
+                className="hidden"
+                onChange={handleFileChange}
+              />
+              <div className="w-16 h-16 rounded-xl bg-white border border-[#E8DDD4] shrink-0 shadow-xs flex items-center justify-center overflow-hidden">
+                {imageUrl ? (
+                  <img
+                    src={imageUrl}
+                    alt={name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-3xl select-none">
+                    {CATEGORIES.find((c) => c.name === category)?.emoji || '📦'}
+                  </span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-extrabold text-[#4A3E3D] text-sm">
+                  {imageUrl ? '📸 등록된 사진' : '📷 사진 없음 (아이콘 표시 중)'}
+                </p>
+                <p className="text-[11px] text-[#9A8784] mt-0.5">
+                  {imageUrl
+                    ? '사진을 변경하거나 삭제할 수 있어요.'
+                    : '카메라로 촬영하거나 사진을 업로드해 보세요.'}
+                </p>
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-2.5 py-1 bg-white hover:bg-[#FAF6F3] text-[#B56562] border border-[#FFD5CF] rounded-lg text-xs font-bold transition-all cursor-pointer shadow-xs"
+                  >
+                    {imageUrl ? '사진 변경' : '📸 사진 등록'}
+                  </button>
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setImageUrl('')}
+                      className="px-2 py-1 bg-[#FFF5F5] hover:bg-[#FFEAE8] text-[#E5484D] border border-[#FFD5D2] rounded-lg text-xs font-bold transition-all cursor-pointer"
+                    >
+                      삭제
+                    </button>
+                  )}
                 </div>
               </div>
-            )}
+            </div>
 
             <form onSubmit={handleFormSubmit} className="space-y-5">
               {/* 이름 */}
