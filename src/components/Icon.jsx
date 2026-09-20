@@ -16,25 +16,10 @@ const paths = {
   image: <><rect x="3" y="4" width="18" height="16" rx="3" /><circle cx="8.5" cy="9" r="1" /><path d="m21 16-5-5L5 20" /></>,
   close: <><path d="M18 6 6 18M6 6l12 12" /></>,
   filter: <><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" /></>,
-  room: <><path d="M3 9.5 12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1V9.5Z" /></>,
-  door: <><path d="M4 21V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16M2 21h18M14 12v.01" /></>,
-  plus: <><path d="M12 5v14M5 12h14" /></>,
-  check: <><path d="M20 6 9 17l-5-5" /></>,
-  folder: <><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" /></>,
-  layers: <><path d="m12 2 10 5-10 5L2 7l10-5ZM2 17l10 5 10-5M2 12l10 5 10-5" /></>,
-  more: <><circle cx="12" cy="12" r="1.5" /><circle cx="19" cy="12" r="1.5" /><circle cx="5" cy="12" r="1.5" /></>,
-  bed: <><path d="M2 4v16M2 8h18a2 2 0 0 1 2 2v10M2 17h20M6 8v3" /></>,
-  drawers: <><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M3 9h18M3 15h18M11 6h2M11 12h2M11 18h2" /></>,
-  wardrobe: <><rect width="18" height="18" x="3" y="3" rx="2" /><path d="M12 3v18M9 11v2M15 11v2" /></>,
-  shelf: <><path d="M4 3v18M20 3v18M4 7h16M4 12h16M4 17h16" /></>,
-  desk: <><path d="M4 6h16v4H4zM4 10v10M20 10v10M14 10v10M14 14h6M14 18h6" /></>,
-  organizer: <><rect width="18" height="14" x="3" y="6" rx="2" /><path d="M3 12h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /></>,
-  floor: <><path d="M3 19h18M5 14h14M8 9h8" /></>,
-  clock: <><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></>,
 };
 
 export default function Icon({ name, size = 20, strokeWidth = 1.8, className = '', label }) {
-  return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden={label ? undefined : true} aria-label={label} className={className}>{paths[name] || paths.box}</svg>;
+  return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden={label ? undefined : true} aria-label={label} className={className}>{paths[name]}</svg>;
 }
 
 /**

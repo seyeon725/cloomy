@@ -1,37 +1,18 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import ItemCard from './ItemCard';
 import { FURNITURE, slotCount, slotName, FLOOR_LOCATION } from '../hooks/useRoom';
 import DuplicateResolutionModal from './DuplicateResolutionModal';
 import { findDuplicateCandidate } from '../utils/duplicate';
-import Icon from './Icon';
 
 export default function ItemList({
   items,
   onSave,
   onCancel,
-  rooms = [],
-  activeRoomId = null,
   roomFurniture = [],
   cancelLabel = '다시 찍기',
   existingItems = [],
   onAddSlot,
-  onAddRoom,
 }) {
-  // --- Room selection ---
-  const [selectedRoomId, setSelectedRoomId] = useState(() => activeRoomId || rooms[0]?.id || 'room-1');
-  const [showNewRoomInput, setShowNewRoomInput] = useState(false);
-  const [newRoomName, setNewRoomName] = useState('');
-
-  useEffect(() => {
-    if (activeRoomId && (!selectedRoomId || !rooms.some(r => r.id === selectedRoomId))) {
-      setSelectedRoomId(activeRoomId);
-    }
-  }, [activeRoomId, rooms, selectedRoomId]);
-
-  const currentRoom = useMemo(() => {
-    return rooms.find(r => r.id === selectedRoomId) || rooms[0] || null;
-  }, [rooms, selectedRoomId]);
-
   // --- Location selection ---
   const [selectedFurnitureId, setSelectedFurnitureId] = useState(null);
   const [selectedSlotIndex, setSelectedSlotIndex] = useState(null);
@@ -49,34 +30,11 @@ export default function ItemList({
   );
   const [recalibrateNotice, setRecalibrateNotice] = useState(null);
 
-  const roomBaseFurniture = currentRoom?.furniture || roomFurniture;
-
   const allFurniture = useMemo(() => {
-    const list = [...roomBaseFurniture];
+    const list = [...roomFurniture];
     if (pendingNew) list.push(pendingNew);
     return list;
-  }, [roomBaseFurniture, pendingNew]);
-
-  const handleSelectRoom = (roomId) => {
-    if (selectedRoomId === roomId) return;
-    setSelectedRoomId(roomId);
-    setSelectedFurnitureId(null);
-    setSelectedSlotIndex(null);
-    setLocation('');
-    setPendingNew(null);
-    setShowNewForm(false);
-  };
-
-  const handleCreateRoom = () => {
-    const name = newRoomName.trim();
-    if (!name || !onAddRoom) return;
-    const created = onAddRoom(name);
-    if (created?.id) {
-      setSelectedRoomId(created.id);
-    }
-    setNewRoomName('');
-    setShowNewRoomInput(false);
-  };
+  }, [roomFurniture, pendingNew]);
 
   const selectedFurniture = allFurniture.find(f => f.id === selectedFurnitureId);
 
@@ -197,7 +155,7 @@ export default function ItemList({
     if (!isLocationValid) { alert('물건이 위치한 가구와 칸을 선택해주세요!'); return; }
     if (selectedCount === 0) { alert('등록할 물건을 하나 이상 선택해주세요!'); return; }
     const selected = itemStateList.filter((item) => item.selected);
-    const meta = { roomId: selectedRoomId };
+    const meta = {};
     if (pendingNew && selectedFurnitureId === pendingNew.id) {
       meta.newFurniture = {
         type: pendingNew.type,
@@ -230,7 +188,7 @@ export default function ItemList({
       setPendingConflicts(conflicts);
       setPendingSaveContext({ selected, location, meta, nonConflicts });
     } else {
-      onSave(selected, location, meta, null, selectedRoomId);
+      onSave(selected, location, meta);
     }
   };
 
@@ -245,25 +203,29 @@ export default function ItemList({
       const { newItem, existingItem } = conflict;
 
       if (decision === 'create_both') {
+        // 각각 다른 물건으로 둘 다 보관 -> 새 물건으로 추가 등록
         itemsToAdd.push(newItem);
       } else if (decision === 'update_existing') {
+        // 새 정보로 변경 -> 기존 물건 업데이트
         itemsToUpdate.push({
-          ...existingItem,
-          name: newItem.name,
-          category: newItem.category,
-          size: newItem.size,
+          id: existingItem.id,
+          name: newItem.name || existingItem.name,
+          category: newItem.category || existingItem.category,
+          size: newItem.size || existingItem.size,
           description: newItem.description || existingItem.description,
-          location: loc,
-          roomId: selectedRoomId,
+          location: loc || existingItem.location,
+          usage: newItem.usage || existingItem.usage || 'frequent',
           imageUrl: newItem.imageUrl || existingItem.imageUrl,
-          lastUsedAt: new Date().toISOString(),
         });
+      } else if (decision === 'keep_existing') {
+        // 원래 것만 유지 -> 새 물건은 추가하지 않음
       }
     });
 
     setPendingConflicts(null);
     setPendingSaveContext(null);
-    onSave(itemsToAdd, loc, meta, { itemsToAdd, itemsToUpdate }, selectedRoomId);
+
+    onSave(itemsToAdd, loc, meta, { itemsToAdd, itemsToUpdate });
   };
 
   return (
@@ -271,139 +233,27 @@ export default function ItemList({
       {/* ===== Location selector ===== */}
       <div className="fluffy-card p-5">
         <div className="flex items-center justify-between mb-3.5">
-          <h3 className="text-base sm:text-lg font-bold text-[#4A3E3D] flex items-center gap-2">
-            <Icon name="pin" size={18} />
-            <span>보관 위치 선택</span>
-          </h3>
-          {location && (
-            <span className="text-xs sm:text-sm font-bold px-3 py-1 bg-[#FFF0EE] text-[#B56562] rounded-full truncate max-w-[240px]">
-              {currentRoom?.name ? `${currentRoom.name} > ` : ''}{location}
-            </span>
-          )}
+          <h3 className="text-base sm:text-lg font-bold text-[#4A3E3D]">📍 어디에 보관하나요?</h3>
+          {location && <span className="text-xs sm:text-sm font-bold px-3 py-1 bg-[#FFF0EE] text-[#B56562] rounded-full truncate max-w-[160px]">{location}</span>}
         </div>
 
-        {/* 1단계: 방 선택 */}
-        <div className="mb-4 pb-3.5 border-b border-[#F4EEEA]">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-[#806F6D] font-extrabold flex items-center gap-1.5">
-              <Icon name="room" size={15} />
-              <span>1단계 · 보관할 방 선택</span>
-            </span>
-            {currentRoom && (
-              <span className="text-[11px] text-[#9A8784]">
-                선택된 공간: <b className="text-[#8F5E4D]">{currentRoom.name}</b>
-              </span>
-            )}
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {rooms.map(r => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => handleSelectRoom(r.id)}
-                className={`fluffy-button px-3.5 py-1.5 text-xs sm:text-sm font-semibold transition-all ${
-                  selectedRoomId === r.id
-                    ? 'bg-[#B56562] text-white shadow-xs font-bold'
-                    : 'bg-[#FAF8F5] text-[#806F6D] hover:bg-[#FFF0EE]'
-                }`}
-              >
-                {r.name}
-              </button>
-            ))}
-            {onAddRoom && (
-              <>
-                {!showNewRoomInput ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowNewRoomInput(true)}
-                    className="fluffy-button px-3 py-1.5 text-xs text-[#B56562] bg-[#FFF0EE] hover:bg-[#FFE5E0] font-bold border border-[#FFD0CC] flex items-center gap-1 cursor-pointer"
-                  >
-                    <Icon name="plus" size={12} strokeWidth={2.5} />
-                    <span>새 방 추가</span>
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-1.5 animate-fadeIn">
-                    <input
-                      type="text"
-                      value={newRoomName}
-                      onChange={e => setNewRoomName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') handleCreateRoom(); }}
-                      placeholder="방 이름 (예: 서재)"
-                      className="fluffy-input px-2.5 py-1 text-xs font-medium w-28"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={handleCreateRoom}
-                      className="fluffy-button px-2.5 py-1 text-xs bg-[#FFB7B2] text-[#4A3E3D] font-bold cursor-pointer"
-                    >
-                      추가
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setShowNewRoomInput(false); setNewRoomName(''); }}
-                      className="fluffy-button px-2 py-1 text-xs bg-white text-[#806F6D] cursor-pointer"
-                    >
-                      취소
-                    </button>
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* 2단계: 가구 선택 */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs text-[#806F6D] font-extrabold flex items-center gap-1.5">
-              <Icon name="box" size={15} />
-              <span>2단계 · {currentRoom?.name || '방'} 안의 가구 선택</span>
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-2.5">
-            <button
-              type="button"
-              onClick={selectFloor}
-              className={`fluffy-button px-4 py-2 text-sm font-semibold ${
-                selectedFurnitureId === 'floor-storage'
-                  ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_8px_20px_rgba(255,183,178,0.35)] font-bold'
-                  : 'bg-[#FAF8F5] text-[#806F6D]'
-              }`}
-            >
-              바닥 보관
+        {/* Furniture buttons */}
+        <div className="flex flex-wrap gap-2.5">
+          <button type="button" onClick={selectFloor} className={`fluffy-button px-4 py-2.5 text-sm font-semibold ${selectedFurnitureId === 'floor-storage' ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_8px_20px_rgba(255,183,178,0.35)]' : 'bg-[#FAF8F5] text-[#806F6D]'}`}>바닥 보관</button>
+          {allFurniture.map(f => (
+            <button key={f.id} type="button" onClick={() => selectFurniture(f)} className={`fluffy-button px-4 py-2.5 text-sm font-semibold ${selectedFurnitureId === f.id ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_8px_20px_rgba(255,183,178,0.35)]' : 'bg-[#FAF8F5] text-[#806F6D]'}`}>
+              {f.name}{f.isPending ? ' ✨' : ''}
             </button>
-            {allFurniture.map(f => (
-              <button
-                key={f.id}
-                type="button"
-                onClick={() => selectFurniture(f)}
-                className={`fluffy-button px-4 py-2 text-sm font-semibold ${
-                  selectedFurnitureId === f.id
-                    ? 'bg-[#FFB7B2] text-[#4A3E3D] shadow-[0_8px_20px_rgba(255,183,178,0.35)] font-bold'
-                    : 'bg-[#FAF8F5] text-[#806F6D]'
-                }`}
-              >
-                {f.name}{f.isPending ? ' (신규)' : ''}
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={openNewForm}
-              className="fluffy-button px-4 py-2 text-sm font-semibold bg-[#FAF8F5] text-[#806F6D] flex items-center gap-1 cursor-pointer"
-            >
-              <Icon name="plus" size={13} strokeWidth={2.2} />
-              <span>새 가구 추가</span>
-            </button>
-          </div>
+          ))}
+          <button type="button" onClick={openNewForm} className="fluffy-button px-4 py-2.5 text-sm font-semibold bg-[#FAF8F5] text-[#806F6D]">+ 새 가구 추가</button>
         </div>
 
-        {/* 3단계: 칸 선택 */}
+        {/* Slot sub-selector & add slot button */}
         {selectedFurniture && selectedFurnitureId !== 'floor-storage' && (
           <div className="flex flex-wrap items-center gap-2 mt-3.5 pl-4 border-l-3 border-[#FFDAC1] animate-fadeIn">
-            <span className="text-xs text-[#806F6D] font-extrabold flex items-center gap-1.5 shrink-0 mr-1">
-              <Icon name="layers" size={14} />
-              <span>3단계 · {selectedFurniture.name} 칸 선택:</span>
+            <span className="text-xs text-[#806F6D] font-extrabold flex items-center gap-1 shrink-0 mr-1">
+              <span>📂</span>
+              <span>{selectedFurniture.name} 칸 선택:</span>
             </span>
 
             {effectiveSlots(selectedFurniture) > 0 ? (
@@ -434,8 +284,7 @@ export default function ItemList({
               className="fluffy-button px-3 py-2 text-xs sm:text-sm font-bold rounded-xl bg-[#FFF0EE] hover:bg-[#FFE5E0] text-[#B56562] border border-[#FFD0CC] flex items-center gap-1 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer"
               title={`${selectedFurniture.name}에 새 칸을 추가하고 바로 선택해요`}
             >
-              <Icon name="plus" size={12} strokeWidth={2.5} />
-              <span>칸 추가</span>
+              <span>+ 칸 추가</span>
             </button>
           </div>
         )}
@@ -462,13 +311,13 @@ export default function ItemList({
       {recalibrateNotice && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-xs">
           <div className="flex items-center gap-3">
-            <span className="text-emerald-600 shrink-0"><Icon name="sparkle" size={20} /></span>
+            <span className="text-2xl">✨</span>
             <div className="text-sm text-emerald-900">
               <span className="font-bold">&apos;{recalibrateNotice.refName}&apos;</span> 기준 상대적 크기 자동 보정 완료!
               <p className="text-xs text-emerald-700 mt-0.5">사진 속 다른 <b>{recalibrateNotice.count}개</b> 물건의 크기가 비례에 맞춰 조정되었습니다.</p>
             </div>
           </div>
-          <button type="button" onClick={() => setRecalibrateNotice(null)} className="text-emerald-700 hover:text-emerald-900 font-bold text-sm px-2.5 py-1 rounded-lg bg-white/70 cursor-pointer">확인 ✕</button>
+          <button type="button" onClick={() => setRecalibrateNotice(null)} className="text-emerald-700 hover:text-emerald-900 font-bold text-sm px-2.5 py-1 rounded-lg bg-white/70">확인 ✕</button>
         </div>
       )}
 
@@ -476,7 +325,7 @@ export default function ItemList({
       <div className="space-y-3.5">
         <div className="flex items-center justify-between px-1">
           <h3 className="text-base sm:text-lg font-bold text-[#4A3E3D]">인식된 물건 ({selectedCount}/{itemStateList.length})</h3>
-          <span className="text-xs sm:text-sm text-gray-500">수정 시 상대적 크기 자동 계산 지원</span>
+          <span className="text-xs sm:text-sm text-gray-500">✏️ 수정 시 상대적 크기 자동 계산 지원</span>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
           {itemStateList.map((item, index) => (
@@ -491,15 +340,8 @@ export default function ItemList({
                   roomFurniture={allFurniture}
                   onAddSlot={onAddSlot}
                 />
-                <button type="button" onClick={() => toggleItem(index)} className="fluffy-button absolute bottom-3 right-3 text-xs font-bold px-3 py-1.5 bg-white shadow-[0_6px_18px_rgba(74,62,61,0.1)] z-10 cursor-pointer">
-                  {item.selected ? (
-                    <span className="text-[#3D7C4F] flex items-center gap-1 font-bold">
-                      <Icon name="check" size={13} strokeWidth={2.5} />
-                      <span>등록 포함</span>
-                    </span>
-                  ) : (
-                    <span className="text-[#9A8784] font-medium">제외됨</span>
-                  )}
+                <button type="button" onClick={() => toggleItem(index)} className="fluffy-button absolute bottom-3 right-3 text-xs font-bold px-3 py-1.5 bg-white shadow-[0_6px_18px_rgba(74,62,61,0.1)] z-10">
+                  {item.selected ? '✅ 등록 포함' : '❌ 제외됨'}
                 </button>
               </div>
             </div>
@@ -509,11 +351,11 @@ export default function ItemList({
 
       {/* ===== Actions ===== */}
       <div className="sticky bottom-20 bg-white/95 backdrop-blur-md p-4 rounded-[28px] shadow-[0_12px_32px_rgba(74,62,61,0.12)] flex flex-col gap-2.5 z-40">
-        {!isLocationValid && <p className="text-xs sm:text-sm text-amber-600 font-bold text-center">상단에서 보관할 방, 가구와 칸을 선택해주세요</p>}
+        {!isLocationValid && <p className="text-xs sm:text-sm text-amber-600 font-bold text-center">⚠️ 상단에서 가구와 칸을 선택해주세요</p>}
         <div className="flex gap-3">
-          <button type="button" onClick={onCancel} className="fluffy-button px-6 py-4 bg-[#FAF8F5] text-[#806F6D] font-bold text-base cursor-pointer">{cancelLabel}</button>
-          <button type="button" onClick={handleSave} disabled={!isLocationValid || selectedCount === 0} className="fluffy-button flex-1 px-5 py-4 bg-[#FFB7B2] text-[#4A3E3D] font-extrabold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_10px_24px_rgba(255,183,178,0.4)] cursor-pointer">
-            {location ? `[${currentRoom?.name ? `${currentRoom.name} ` : ''}${location}]에 ` : ''}{selectedCount}개 등록하기
+          <button type="button" onClick={onCancel} className="fluffy-button px-6 py-4 bg-[#FAF8F5] text-[#806F6D] font-bold text-base">{cancelLabel}</button>
+          <button type="button" onClick={handleSave} disabled={!isLocationValid || selectedCount === 0} className="fluffy-button flex-1 px-5 py-4 bg-[#FFB7B2] text-[#4A3E3D] font-extrabold text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_10px_24px_rgba(255,183,178,0.4)]">
+            {location ? `[${location}]에 ` : ''}{selectedCount}개 등록하기
           </button>
         </div>
       </div>

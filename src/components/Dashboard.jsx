@@ -19,15 +19,11 @@ export default function Dashboard({
   onUpdateMultiple,
   onRemove,
   onRemoveMultiple,
-  rooms = [],
-  activeRoomId = null,
-  setActiveRoomId,
   roomFurniture = [],
   onAddFurniture,
   onStartDeclutter,
   onAddSlot,
 }) {
-  const [selectedRoomId, setSelectedRoomId] = useState(() => activeRoomId || 'all');
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedLocations, setSelectedLocations] = useState([]);
   const [expandedFurn, setExpandedFurn] = useState(null);
@@ -115,93 +111,60 @@ export default function Dashboard({
       } else if (onRemove) {
         idsToDelete.forEach((id) => onRemove(id));
       }
-      setNoticeMessage(`${count}개의 물건을 삭제했어요.`);
+      setNoticeMessage(`✨ ${count}개의 물건을 삭제했어요.`);
       setSelectedItemIds(new Set());
       setIsEditMode(false);
     }
   };
 
-  const handleBatchMoveConfirm = ({ targetRoomId, targetLocation, newFurniture }) => {
+  const handleBatchMoveConfirm = ({ targetLocation, newFurniture }) => {
     if (!targetLocation || selectedItemIds.size === 0) return;
     const count = selectedItemIds.size;
 
     if (newFurniture && onAddFurniture) {
-      onAddFurniture(newFurniture, targetRoomId);
+      onAddFurniture(newFurniture);
     }
 
     const updates = Array.from(selectedItemIds).map((id) => ({
       id,
       location: targetLocation,
-      ...(targetRoomId ? { roomId: targetRoomId } : {}),
     }));
 
     if (onUpdateMultiple) {
       onUpdateMultiple(updates);
     } else if (onUpdate) {
-      updates.forEach((u) => onUpdate(u.id, u));
+      updates.forEach((u) => onUpdate(u.id, { location: targetLocation }));
     }
 
     setShowMoveModal(false);
-    setNoticeMessage(`${count}개 물건을 '${targetLocation}'(으)로 이동했어요.`);
+    setNoticeMessage(`✨ ${count}개 물건을 '${targetLocation}'(으)로 이동했어요.`);
     setSelectedItemIds(new Set());
     setIsEditMode(false);
   };
 
-  const currentRoom = useMemo(() => {
-    return rooms.find((r) => r.id === selectedRoomId) || null;
-  }, [rooms, selectedRoomId]);
-
-  const effectiveFurniture = useMemo(() => {
-    if (selectedRoomId !== 'all' && currentRoom) {
-      return currentRoom.furniture || [];
-    }
-    if (rooms.length > 0) {
-      return rooms.flatMap((r) => r.furniture || []);
-    }
-    return roomFurniture;
-  }, [selectedRoomId, currentRoom, rooms, roomFurniture]);
-
-  const roomFilteredItems = useMemo(() => {
-    if (!selectedRoomId || selectedRoomId === 'all') return items;
-    return items.filter((item) => {
-      if (item.roomId) return item.roomId === selectedRoomId;
-      return selectedRoomId === (rooms[0]?.id || 'room-1');
-    });
-  }, [items, selectedRoomId, rooms]);
-
-  const roomStats = useMemo(() => {
-    const s = { total: roomFilteredItems.length, active: 0, trading: 0, discarded: 0 };
-    for (const item of roomFilteredItems) {
-      if (item.status === 'trading') s.trading++;
-      else if (item.status === 'discarded') s.discarded++;
-      else s.active++;
-    }
-    return s;
-  }, [roomFilteredItems]);
-
-  const roomCategories = useMemo(() => {
-    const map = {};
-    for (const item of roomFilteredItems) {
-      const cat = item.category || '기타';
-      map[cat] = (map[cat] || 0) + 1;
-    }
-    return map;
-  }, [roomFilteredItems]);
-
   const activeFilterCount =
-    (selectedRoomId !== 'all' ? 1 : 0) +
     (selectedCategory ? 1 : 0) +
     selectedLocations.length +
     (selectedUsage ? 1 : 0);
 
   const furnitureGroups = useMemo(() => {
     const furnMap = new Map();
+    const getIcon = (furnName) => {
+      if (furnName === '바닥 보관') return '🧺';
+      if (furnName === '미분류') return '📍';
+      const f = roomFurniture.find((rf) => rf.name === furnName);
+      if (f && f.type) {
+        const icons = { drawers: '🗄️', shelf: '📚', desk: '🖥️', bed: '🛏️', wardrobe: '👗', organizer: '📦' };
+        return icons[f.type] || '🗄️';
+      }
+      return '🏠';
+    };
 
-    for (const f of effectiveFurniture) {
-      furnMap.set(f.name, { id: f.id, name: f.name, type: f.type, totalCount: 0, slots: new Map() });
+    for (const f of roomFurniture) {
+      furnMap.set(f.name, { id: f.id, name: f.name, icon: getIcon(f.name), totalCount: 0, slots: new Map() });
     }
 
-    for (const item of roomFilteredItems) {
+    for (const item of items) {
       const rawLoc = (item.location || '미분류').trim();
       let furnName = rawLoc;
       let slotPart = null;
@@ -211,7 +174,7 @@ export default function Dashboard({
         slotPart = rawLoc.slice(idx + 3).trim();
       }
       if (!furnMap.has(furnName)) {
-        furnMap.set(furnName, { id: furnName, name: furnName, type: 'box', totalCount: 0, slots: new Map() });
+        furnMap.set(furnName, { id: furnName, name: furnName, icon: getIcon(furnName), totalCount: 0, slots: new Map() });
       }
       const g = furnMap.get(furnName);
       g.totalCount++;
@@ -230,7 +193,7 @@ export default function Dashboard({
         slots: Array.from(g.slots.values()).sort((a, b) => a.label.localeCompare(b.label, 'ko', { numeric: true })),
       }))
       .sort((a, b) => b.totalCount - a.totalCount);
-  }, [roomFilteredItems, effectiveFurniture]);
+  }, [items, roomFurniture]);
 
   const toggleFurniture = (furn) => {
     const furnKey = `furn:${furn.name}`;
@@ -282,7 +245,7 @@ export default function Dashboard({
     });
   };
 
-  const filteredItems = useMemo(() => roomFilteredItems.filter((item) => {
+  const filteredItems = useMemo(() => items.filter((item) => {
     if (selectedStatus !== 'all' && item.status !== selectedStatus) return false;
     if (selectedCategory && item.category !== selectedCategory) return false;
     if (selectedUsage && (item.usage || 'frequent') !== selectedUsage) return false;
@@ -309,10 +272,9 @@ export default function Dashboard({
       if (!nameMatch && !descMatch && !catMatch && !locMatch) return false;
     }
     return true;
-  }), [roomFilteredItems, selectedStatus, selectedCategory, selectedLocations, selectedUsage, searchQuery]);
+  }), [items, selectedStatus, selectedCategory, selectedLocations, selectedUsage, searchQuery]);
 
   const clearAllFilters = () => {
-    setSelectedRoomId('all');
     setSelectedCategory(null);
     setSelectedLocations([]);
     setSelectedUsage(null);
@@ -320,7 +282,7 @@ export default function Dashboard({
     setExpandedFurn(null);
     setSearchQuery('');
   };
-  const isFiltered = selectedRoomId !== 'all' || selectedCategory || selectedLocations.length > 0 || selectedUsage || selectedStatus !== 'all' || !!searchQuery.trim();
+  const isFiltered = selectedCategory || selectedLocations.length > 0 || selectedUsage || selectedStatus !== 'all' || !!searchQuery.trim();
 
   const handleBatchRecalibrate = (referenceItem, updatedList) => {
     const sizeOrder = ['tiny', 'small', 'medium', 'large'];
@@ -345,54 +307,6 @@ export default function Dashboard({
 
   return (
     <div className="space-y-6 pb-12">
-      {/* 방 선택 칩 바 (전체 공간 / 각 방별 필터링) */}
-      {rooms.length > 0 && (
-        <div className="bg-white/90 backdrop-blur-sm p-2 sm:p-2.5 rounded-[22px] border border-[#EDE5DE] shadow-xs flex items-center justify-between gap-2 overflow-x-auto no-scrollbar">
-          <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
-            <span className="text-xs font-extrabold text-[#806F6D] flex items-center gap-1 px-2">
-              <Icon name="room" size={15} />
-              <span>방:</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelectedRoomId('all')}
-              className={`fluffy-button px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-extrabold transition-all flex items-center gap-1.5 ${
-                selectedRoomId === 'all'
-                  ? 'bg-[#4A3E3D] text-white shadow-xs'
-                  : 'bg-[#FAF8F5] text-[#6D5A57] hover:bg-[#FFF5EE]'
-              }`}
-            >
-              <span>전체 공간</span>
-              <span className={`text-xs px-1.5 py-0.2 rounded-full font-bold ${selectedRoomId === 'all' ? 'bg-white/25 text-white' : 'bg-[#EFE7E2] text-[#806F6D]'}`}>
-                {items.length}
-              </span>
-            </button>
-            {rooms.map((r) => {
-              const count = items.filter((i) => (i.roomId ? i.roomId === r.id : r.id === (rooms[0]?.id || 'room-1'))).length;
-              const isSelected = selectedRoomId === r.id;
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => setSelectedRoomId(r.id)}
-                  className={`fluffy-button px-3.5 py-1.5 rounded-full text-xs sm:text-sm font-extrabold transition-all flex items-center gap-1.5 ${
-                    isSelected
-                      ? 'bg-[#B56562] text-white shadow-xs'
-                      : 'bg-[#FAF8F5] text-[#6D5A57] hover:bg-[#FFF5EE]'
-                  }`}
-                >
-                  <Icon name="door" size={13} />
-                  <span>{r.name}</span>
-                  <span className={`text-xs px-1.5 py-0.2 rounded-full font-bold ${isSelected ? 'bg-white/25 text-white' : 'bg-[#EFE7E2] text-[#806F6D]'}`}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {/* 상태별 카운트 버튼 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4.5">
         {statusOptions.map(({ id, icon, label, color }) => {
@@ -410,7 +324,7 @@ export default function Dashboard({
                 <Icon name={icon} size={21} strokeWidth={1.7} />
               </div>
               <div className={`text-3xl sm:text-4xl font-extrabold ${isActive ? '' : 'text-[#4A3E3D]'}`}>
-                {id === 'all' ? roomStats.total : roomStats[id] || 0}
+                {id === 'all' ? stats.total : stats[id] || 0}
               </div>
               <div className="text-xs sm:text-sm font-bold text-[#806F6D] mt-1">{label}</div>
             </button>
@@ -486,14 +400,12 @@ export default function Dashboard({
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 lg:gap-5 xl:gap-6 lg:items-start">
             {/* 1. 카테고리별 */}
-            {Object.keys(roomCategories).length > 0 && (
+            {Object.keys(stats.categories).length > 0 && (
               <section className="fluffy-card p-4 sm:p-5 h-full flex flex-col justify-between">
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-3.5">
-                    <h3 className="text-base sm:text-lg font-extrabold text-[#4A3E3D] flex items-center gap-1.5">
-                      <Icon name="layers" size={16} />
-                      <span>카테고리별</span>
-                      <span className="text-xs font-medium text-[#9A8784]">(모아보기)</span>
+                    <h3 className="text-base sm:text-lg font-extrabold text-[#4A3E3D]">
+                      📊 카테고리별 <span className="text-xs font-medium text-[#9A8784]">(모아보기)</span>
                     </h3>
                     {selectedCategory && (
                       <button
@@ -506,7 +418,7 @@ export default function Dashboard({
                     )}
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-2 sm:gap-2.5">
-                    {Object.entries(roomCategories)
+                    {Object.entries(stats.categories)
                       .sort(([, a], [, b]) => b - a)
                       .map(([category, count]) => {
                         const selected = selectedCategory === category;
@@ -540,9 +452,7 @@ export default function Dashboard({
                 <div>
                   <div className="flex items-center justify-between gap-2 mb-1.5">
                     <h3 className="text-base sm:text-lg font-extrabold text-[#4A3E3D] flex items-center gap-1.5">
-                      <Icon name="box" size={16} />
-                      <span>위치별</span>
-                      <span className="text-xs font-medium text-[#9A8784]">(칸/중복 선택)</span>
+                      <span>📍</span> 위치별 <span className="text-xs font-medium text-[#9A8784]">(칸/중복 선택)</span>
                     </h3>
                     {selectedLocations.length > 0 && (
                       <button
@@ -671,10 +581,8 @@ export default function Dashboard({
             <section className="fluffy-card p-4 sm:p-5 h-full flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between gap-2 mb-3.5">
-                  <h3 className="text-base sm:text-lg font-extrabold text-[#4A3E3D] flex items-center gap-1.5">
-                    <Icon name="clock" size={16} />
-                    <span>사용 빈도별</span>
-                    <span className="text-xs font-medium text-[#9A8784]">(모아보기)</span>
+                  <h3 className="text-base sm:text-lg font-extrabold text-[#4A3E3D]">
+                    ⏱️ 사용 빈도별 <span className="text-xs font-medium text-[#9A8784]">(모아보기)</span>
                   </h3>
                   {selectedUsage && (
                     <button
@@ -722,17 +630,7 @@ export default function Dashboard({
       {isFiltered && (
         <div className="flex items-center justify-between gap-3 rounded-[24px] bg-[#FFF0E5] p-3.5 sm:p-4 shadow-[0_10px_30px_rgba(74,62,61,0.06)] flex-wrap">
           <div className="flex items-center gap-2 flex-wrap text-xs sm:text-sm">
-            <span className="font-extrabold text-[#80604F] flex items-center gap-1">
-              <Icon name="filter" size={14} />
-              <span>적용된 필터:</span>
-            </span>
-            {selectedRoomId !== 'all' && (
-              <span className="bg-white px-2.5 py-1 rounded-xl text-[#B56562] font-bold border border-[#FFDAC1] flex items-center gap-1 shadow-xs">
-                <Icon name="door" size={12} />
-                방: {currentRoom?.name || '선택한 방'}
-                <button type="button" onClick={() => setSelectedRoomId('all')} className="hover:text-red-500 font-black">✕</button>
-              </span>
-            )}
+            <span className="font-extrabold text-[#80604F]">🏷️ 적용된 필터:</span>
             {searchQuery && (
               <span className="bg-white px-2.5 py-1 rounded-xl text-[#B56562] font-bold border border-[#FFDAC1] flex items-center gap-1 shadow-xs">
                 검색: '{searchQuery}'
@@ -778,7 +676,7 @@ export default function Dashboard({
       {recalibrateNotice && (
         <div className="flex items-center justify-between gap-3 rounded-[24px] bg-[#FFF5D9] p-4 shadow-[0_10px_30px_rgba(74,62,61,0.06)]">
           <p className="text-sm text-[#80604F]">
-            <b>{recalibrateNotice.refName}</b> 기준으로 {recalibrateNotice.count}개 물건의 크기를 다시 맞췄어요.
+            ✨ <b>{recalibrateNotice.refName}</b> 기준으로 {recalibrateNotice.count}개 물건의 크기를 다시 맞췄어요.
           </p>
           <button
             type="button"
@@ -807,18 +705,17 @@ export default function Dashboard({
       <section className="space-y-4">
         <div className="flex items-center justify-between px-1 flex-wrap gap-2.5">
           <div>
-            <h3 className="text-lg sm:text-xl font-extrabold text-[#4A3E3D] flex items-center gap-1.5">
-              <Icon name="folder" size={18} />
-              <span>물건 목록 ({filteredItems.length}개)</span>
+            <h3 className="text-lg sm:text-xl font-extrabold text-[#4A3E3D]">
+              🗂️ 물건 목록 ({filteredItems.length}개)
             </h3>
             <span className="text-xs text-[#9A8784]">
               {isEditMode
-                ? '물건을 체크하여 다른 곳으로 이동하거나 삭제할 수 있어요'
+                ? '💡 물건을 체크하여 다른 곳으로 이동하거나 삭제할 수 있어요'
                 : isDeclutterMode
-                ? '정리할 물건들을 클릭하여 선택해주세요'
+                ? '✨ 정리할 물건들을 클릭하여 선택해주세요'
                 : viewMode === 'block'
-                ? '블록 그리드로 보는 중'
-                : '일렬 목록으로 보는 중'}
+                ? '⊞ 블록 그리드로 보는 중'
+                : '☰ 일렬 목록으로 보는 중'}
             </span>
           </div>
 
@@ -845,7 +742,7 @@ export default function Dashboard({
                   onClick={handleExitEditMode}
                   className="fluffy-button px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold bg-[#4A3E3D] text-white hover:bg-[#342B2A] shadow-xs"
                 >
-                  완료
+                  완료 ✓
                 </button>
               </div>
             ) : isDeclutterMode ? (
@@ -869,12 +766,12 @@ export default function Dashboard({
                   onClick={handleExitDeclutterMode}
                   className="fluffy-button px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-extrabold bg-[#FAF8F5] text-[#806F6D] hover:bg-[#FFEAE5] hover:text-[#B56562] border border-[#EDE5DE]"
                 >
-                  취소
+                  ✕ 취소
                 </button>
               </div>
             ) : (
               <>
-                {/* 편집 버튼 */}
+                {/* ✏️ 편집 모드 토글 버튼 */}
                 <button
                   type="button"
                   onClick={() => {
@@ -889,7 +786,7 @@ export default function Dashboard({
                   <span>편집</span>
                 </button>
 
-                {/* 정리하기 버튼 */}
+                {/* ✨ 정리하기 버튼 */}
                 <button
                   type="button"
                   onClick={() => {
@@ -901,7 +798,7 @@ export default function Dashboard({
                   title="정리할 물건들을 선택해서 AI와 함께 정리해요"
                 >
                   <Icon name="sparkle" size={15} />
-                  <span>정리하기</span>
+                  <span>✨ 정리하기</span>
                 </button>
               </>
             )}
@@ -969,9 +866,7 @@ export default function Dashboard({
                   onRemove={onRemove}
                   otherItems={nearby.length ? nearby : items.filter((other) => other.id !== item.id)}
                   onBatchRecalibrate={handleBatchRecalibrate}
-                  rooms={rooms}
-                  activeRoomId={selectedRoomId === 'all' ? (activeRoomId || rooms[0]?.id) : selectedRoomId}
-                  roomFurniture={effectiveFurniture}
+                  roomFurniture={roomFurniture}
                   viewMode={viewMode}
                   isDeclutterMode={isDeclutterMode}
                   isEditMode={isEditMode}
@@ -990,9 +885,7 @@ export default function Dashboard({
         <div className="fixed bottom-20 sm:bottom-24 left-1/2 -translate-x-1/2 z-40 max-w-lg w-[92%] sm:w-auto animate-fadeIn">
           <div className="bg-white/95 backdrop-blur-md border-2 border-[#FFB7B2] shadow-[0_16px_40px_rgba(74,62,61,0.2)] rounded-full px-5 py-3 flex items-center justify-between gap-4">
             <div className="flex items-center gap-2 pl-1">
-              <span className="text-[#B56562]">
-                <Icon name="sparkle" size={18} />
-              </span>
+              <span className="text-xl">✨</span>
               <span className="text-sm sm:text-base font-extrabold text-[#4A3E3D]">
                 <b className="text-[#B56562] font-black text-base sm:text-lg">{selectedItemIds.size}개</b> 선택됨
               </span>
@@ -1024,9 +917,7 @@ export default function Dashboard({
         <div className="fixed bottom-20 sm:bottom-24 left-1/2 -translate-x-1/2 z-40 max-w-lg w-[92%] sm:w-auto animate-fadeIn">
           <div className="bg-white/95 backdrop-blur-md border-2 border-[#FFB7B2] shadow-[0_16px_40px_rgba(74,62,61,0.22)] rounded-full px-4 sm:px-5 py-3 flex items-center justify-between gap-3 sm:gap-4">
             <div className="flex items-center gap-2 pl-1 shrink-0">
-              <span className="text-[#B56562]">
-                <Icon name="pencil" size={18} />
-              </span>
+              <span className="text-lg sm:text-xl">✏️</span>
               <span className="text-xs sm:text-sm font-extrabold text-[#4A3E3D]">
                 <b className="text-[#B56562] font-black text-sm sm:text-base">{selectedItemIds.size}개</b> 선택됨
               </span>
@@ -1075,9 +966,7 @@ export default function Dashboard({
         <MoveItemsModal
           selectedItemCount={selectedItemIds.size}
           currentLocation=""
-          rooms={rooms}
-          activeRoomId={selectedRoomId === 'all' ? (activeRoomId || rooms[0]?.id) : selectedRoomId}
-          roomFurniture={effectiveFurniture}
+          roomFurniture={roomFurniture}
           onConfirm={handleBatchMoveConfirm}
           onClose={() => setShowMoveModal(false)}
           onAddSlot={onAddSlot}

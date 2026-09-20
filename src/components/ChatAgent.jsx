@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { chatWithAgent } from '../services/gemini';
 import { USAGE_CONFIG } from '../hooks/useItems';
-import Icon from './Icon';
 
 export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems, onClearDeclutterItems }) {
   const items = itemsHook?.items || itemsProp || [];
@@ -81,7 +80,7 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
       );
       const applied = applyActions(result.actions);
       setMessages([
-        { role: 'user', text: '정리 도와줘!' },
+        { role: 'user', text: '정리 도와줘! 🙋' },
         {
           role: 'assistant',
           text: result.reply,
@@ -92,11 +91,11 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
     } catch (err) {
       console.error('startChat error:', err);
       setMessages([
-        { role: 'user', text: '정리 도와줘!' },
+        { role: 'user', text: '정리 도와줘! 🙋' },
         {
           role: 'assistant',
-          text: '안녕하세요! 물건 정리를 도와드릴게요. 어떤 물건부터 정리해볼까요?',
-          quickReplies: ['자주 쓰는 물건 정리', '안 쓰는 물건 비우기', '미분류 물건 배치'],
+          text: '안녕하세요! 물건 정리를 도와드릴게요. 어떤 물건부터 정리해볼까요? 😊',
+          quickReplies: ['자주 쓰는 물건 정리 ⭐', '안 쓰는 물건 비우기 🗑️', '미분류 물건 배치 📍'],
         },
       ]);
     } finally {
@@ -209,8 +208,8 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
   if (!isStarted) {
     return (
       <div className="flex flex-col items-center justify-center gap-6 py-16 sm:py-24 px-6 text-center bg-white rounded-[32px] shadow-[0_12px_36px_rgba(74,62,61,0.06)] border border-[#F4EEEA] w-full">
-        <div className="p-6 bg-[#FFF0EE] rounded-full shadow-[0_10px_30px_rgba(255,183,178,0.22)] text-[#B56562]">
-          <Icon name="sparkle" size={54} />
+        <div className="text-7xl sm:text-8xl p-6 bg-[#FFF0EE] rounded-full shadow-[0_10px_30px_rgba(255,183,178,0.22)]">
+          🧹
         </div>
         <div className="space-y-2 max-w-md">
           <h3 className="text-2xl sm:text-3xl font-black text-[#4A3E3D]">AI 정리 컨설턴트</h3>
@@ -220,7 +219,7 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
         </div>
         {items.length === 0 ? (
           <p className="text-base font-bold text-[#A66E22] bg-[#FFF5D9] px-5 py-3 rounded-full shadow-[0_8px_20px_rgba(74,62,61,0.06)]">
-            먼저 물건을 스캔해서 등록해주세요!
+            ⚠️ 먼저 물건을 스캔해서 등록해주세요!
           </p>
         ) : (
           <button
@@ -228,7 +227,7 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
             onClick={startChat}
             className="fluffy-button px-8 py-4 bg-[#FFB7B2] hover:bg-[#FFA59E] text-[#4A3E3D] font-extrabold text-lg shadow-[0_12px_28px_rgba(255,183,178,0.45)] flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
           >
-            <span>초간결 정리 상담 시작</span>
+            <span>🗣️ 초간결 정리 상담 시작</span>
             <span className="text-sm font-semibold bg-white/60 px-2.5 py-0.5 rounded-full">
               {items.length}개 물건
             </span>
@@ -265,7 +264,7 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
               {msg.appliedChanges && msg.appliedChanges.length > 0 && (
                 <div className="mt-3 pt-2.5 border-t border-[#F2ECE8] space-y-1.5">
                   <div className="text-[11px] font-bold text-[#8F655D] flex items-center gap-1">
-                    <span>내 물건 목록에 바로 반영됨:</span>
+                    <span>⚡</span> <span>내 물건 목록에 바로 반영됨:</span>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {msg.appliedChanges.map((ch, cIdx) => (
@@ -334,7 +333,7 @@ export default function ChatAgent({ itemsHook, items: itemsProp, declutterItems,
       <div className="p-3 sm:p-4 bg-white shadow-[0_-4px_18px_rgba(74,62,61,0.04)] space-y-2">
         {!isLoading && activeQuickReplies.length > 0 && (
           <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar">
-            <span className="text-[#A1908D] font-bold shrink-0 text-[11px] pl-1">추천:</span>
+            <span className="text-[#A1908D] font-bold shrink-0 text-[11px] pl-1">💡 추천:</span>
             {activeQuickReplies.map((qr, idx) => (
               <button
                 key={idx}
