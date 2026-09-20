@@ -4,6 +4,7 @@ import FurnitureDeleteModal from '../components/FurnitureDeleteModal';
 import MoveItemsModal from '../components/MoveItemsModal';
 import UnplacedItemsModal from '../components/UnplacedItemsModal';
 import PlacedSummaryModal from '../components/PlacedSummaryModal';
+import { FlaticonEdit, FlaticonCheck } from '../components/Icon';
 import './RoomPage.css';
 
 const point = (x, y, z = 0) => [350 + (x - y) * 29, 148 + (x + y) * 15 - z * 34];
@@ -851,27 +852,22 @@ export default function RoomPage({ itemsHook, room, onScan, pendingNotice, clear
         <span>방 추가</span>
       </button>
 
-      {/* 방 편집 토글 버튼 */}
+      {/* 방 편집 토글 버튼 (아이콘 전용) */}
       <button
         type="button"
         onClick={() => setIsRoomEditMode(!isRoomEditMode)}
-        className={`px-3 py-2 rounded-2xl text-xs sm:text-sm font-extrabold flex items-center gap-1.5 transition-all whitespace-nowrap cursor-pointer active:scale-95 shadow-xs shrink-0 ${
+        className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 shadow-xs shrink-0 ${
           isRoomEditMode
             ? 'bg-[#B56562] text-white shadow-sm'
             : 'bg-white text-[#705E5B] hover:bg-[#FFF2F0] border border-[#EFE8E3]'
         }`}
         title={isRoomEditMode ? '편집 완료' : '방 편집'}
+        aria-label={isRoomEditMode ? '편집 완료' : '방 편집'}
       >
         {isRoomEditMode ? (
-          <>
-            <span className="text-xs font-black">✓</span>
-            <span>완료</span>
-          </>
+          <FlaticonCheck size={18} className="text-white" />
         ) : (
-          <>
-            <span>✏️</span>
-            <span>편집</span>
-          </>
+          <FlaticonEdit size={19} />
         )}
       </button>
     </div>

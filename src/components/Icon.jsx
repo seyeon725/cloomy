@@ -139,3 +139,89 @@ export function FlaticonShutter({ size = 36, className = '' }) {
   );
 }
 
+/**
+ * Flaticon 스타일 깔끔하고 부드러운 연필/편집 SVG 아이콘
+ */
+export function FlaticonEdit({ size = 18, className = '' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`shrink-0 ${className}`}
+    >
+      {/* 뒤쪽 핑크 지우개 팁 */}
+      <path
+        d="M16.5 9.2L22.8 15.5L24.8 13.5C25.8 12.5 25.8 10.9 24.8 9.9L22.1 7.2C21.1 6.2 19.5 6.2 18.5 7.2L16.5 9.2Z"
+        fill="#FFAAA6"
+        stroke="#8F5E4D"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* 금속 밴드 */}
+      <path
+        d="M16.5 9.2L22.8 15.5L20.8 17.5L14.5 11.2L16.5 9.2Z"
+        fill="#E8DFD8"
+        stroke="#8F5E4D"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      {/* 연필 바디 */}
+      <path
+        d="M14.5 11.2L20.8 17.5L9.8 28.5L3.5 22.2L14.5 11.2Z"
+        fill="#FFE2D6"
+        stroke="#8F5E4D"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      {/* 바디 음영/디테일 라인 */}
+      <path
+        d="M13 12.7L6.7 19"
+        stroke="#FFB8A5"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+      {/* 깎인 나무 팁 */}
+      <path
+        d="M3.5 22.2L9.8 28.5L2 30L3.5 22.2Z"
+        fill="#FFF7F2"
+        stroke="#8F5E4D"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      {/* 흑연 심 */}
+      <path
+        d="M2 30L4 28.5L3.5 28L2 30Z"
+        fill="#8F5E4D"
+      />
+    </svg>
+  );
+}
+
+/**
+ * Flaticon 스타일 완료 체크 SVG 아이콘
+ */
+export function FlaticonCheck({ size = 18, strokeWidth = 2.4, className = '' }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={`shrink-0 ${className}`}
+    >
+      <path
+        d="M4.5 12.5L9.5 17.5L19.5 6.5"
+        stroke="currentColor"
+        strokeWidth={strokeWidth}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
