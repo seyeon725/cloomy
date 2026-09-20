@@ -20,8 +20,8 @@ const paths = {
   cloudCheck: <><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" /><path d="m9 13 2 2 4-4" /></>,
 };
 
-export default function Icon({ name, size = 20, strokeWidth = 1.8, className = '', label }) {
-  return <svg viewBox="0 0 24 24" width={size} height={size} fill="none" stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden={label ? undefined : true} aria-label={label} className={className}>{paths[name]}</svg>;
+export default function Icon({ name, size = 20, strokeWidth = 1.8, className = '', fill = 'none', fillOpacity, label }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} fill={fill} fillOpacity={fillOpacity} stroke="currentColor" strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" aria-hidden={label ? undefined : true} aria-label={label} className={className}>{paths[name]}</svg>;
 }
 
 /**

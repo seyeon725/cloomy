@@ -222,6 +222,8 @@ export default function App() {
   }
 
   const isLoggedIn = user && !user.isGuest;
+  const isCloudConnected = Boolean(isLoggedIn && syncStatus === 'synced');
+  const isSyncing = Boolean(isLoggedIn && syncStatus === 'syncing');
 
   return (
     <div className="min-h-dvh bg-[#FAF8F5] flex flex-col font-sans text-[#4A3E3D]">
@@ -249,33 +251,51 @@ export default function App() {
             등록 물건 {itemsHook.items.length}개
           </span>
 
-          {/* 클라우드 연동 및 백업 아이콘 버튼 */}
+          {/* 클라우드 연동 및 백업 아이콘 버튼 (연동 시 연두빛, 미연동 시 빨간빛) */}
           <button
             type="button"
             onClick={() => setShowRecoveryModal(true)}
-            className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#FAF8F5] hover:bg-[#FFF0EE] text-[#705E5B] hover:text-[#B56562] transition-all cursor-pointer shadow-xs active:scale-95 border border-[#EFE8E3]"
+            className={`relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-full transition-all cursor-pointer shadow-xs active:scale-95 border ${
+              isCloudConnected
+                ? 'bg-[#EAF5EC] hover:bg-[#DDF2E1] border-[#B7E4C7] text-[#2E7D32]'
+                : isSyncing
+                ? 'bg-[#FFFBEB] hover:bg-[#FEF3C7] border-[#FDE68A] text-[#D97706]'
+                : 'bg-[#FFF0EE] hover:bg-[#FFE5E0] border-[#FFCCD2] text-[#E5484D]'
+            }`}
             title={
-              isLoggedIn
-                ? (syncStatus === 'permission_denied'
-                    ? '클라우드 동기화 설정 필요 (클릭)'
-                    : syncStatus === 'syncing'
-                    ? '클라우드 동기화 진행 중...'
-                    : '클라우드 연동 완료 및 데이터 백업')
-                : '클라우드 연동 및 데이터 백업'
+              isCloudConnected
+                ? '🟢 클라우드 실시간 연동 완료 (모바일/PC 동기화 중)'
+                : isSyncing
+                ? '🔄 클라우드 실시간 동기화 진행 중...'
+                : syncStatus === 'permission_denied'
+                ? '⚠️ 클라우드 설정 필요 (Firestore 보안 규칙 설정)'
+                : '🔴 클라우드 미연동 (클릭하여 모바일/PC 실시간 연동하기)'
             }
           >
-            <Icon name="cloud" size={19} strokeWidth={1.8} />
-            {isLoggedIn && (
-              <span
-                className={`absolute top-1.5 right-1.5 w-2 h-2 rounded-full ring-2 ring-white ${
-                  syncStatus === 'permission_denied'
-                    ? 'bg-[#E5484D]'
-                    : syncStatus === 'syncing'
-                    ? 'bg-[#D97706] animate-pulse'
-                    : 'bg-[#3D7C4F]'
-                }`}
-              />
-            )}
+            <Icon
+              name="cloud"
+              size={19}
+              strokeWidth={1.9}
+              fill={
+                isCloudConnected
+                  ? '#A5D6A7'
+                  : isSyncing
+                  ? '#FDE68A'
+                  : '#FFCDD2'
+              }
+              fillOpacity={0.45}
+              className={isSyncing ? 'animate-pulse' : ''}
+            />
+            {/* 상태 뱃지 점 */}
+            <span
+              className={`absolute top-1 right-1 w-2 h-2 rounded-full ring-2 ring-white ${
+                isCloudConnected
+                  ? 'bg-[#22C55E]'
+                  : isSyncing
+                  ? 'bg-[#F59E0B] animate-ping'
+                  : 'bg-[#E5484D]'
+              }`}
+            />
           </button>
 
           {/* 사용자 프로필 / 로그인 버튼 */}

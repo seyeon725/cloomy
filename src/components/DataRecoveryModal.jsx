@@ -220,6 +220,8 @@ service cloud.firestore {
     setMessage('새로운 시작을 위해 데이터가 깨끗하게 초기화되었습니다.');
   };
 
+  const isCloudConnected = Boolean(isLoggedIn && syncStatus === 'synced');
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs px-4"
@@ -232,8 +234,20 @@ service cloud.firestore {
         {/* 모달 상단 헤더 */}
         <div className="flex items-center justify-between pb-3 border-b border-[#F0ECE9] mb-4">
           <div className="flex items-center gap-2.5">
-            <span className="w-9 h-9 rounded-2xl bg-[#FFF0EE] text-[#B56562] flex items-center justify-center shadow-xs">
-              <Icon name="cloud" size={20} strokeWidth={2} />
+            <span
+              className={`w-9 h-9 rounded-2xl flex items-center justify-center shadow-xs border ${
+                isCloudConnected
+                  ? 'bg-[#EAF5EC] border-[#B7E4C7] text-[#2E7D32]'
+                  : 'bg-[#FFF0EE] border-[#FFCCD2] text-[#E5484D]'
+              }`}
+            >
+              <Icon
+                name="cloud"
+                size={20}
+                strokeWidth={2}
+                fill={isCloudConnected ? '#A5D6A7' : '#FFCDD2'}
+                fillOpacity={0.45}
+              />
             </span>
             <div>
               <h3 className="text-base sm:text-lg font-black text-[#4A3E3D] tracking-tight">
@@ -377,6 +391,21 @@ service cloud.firestore {
               </button>
             </div>
           )}
+
+          {/* 구름 아이콘 색상 설명 뱃지 */}
+          <div
+            className={`mt-3 p-2.5 rounded-xl border text-[11px] leading-relaxed flex items-center gap-2 ${
+              isCloudConnected
+                ? 'bg-[#EAF5EC] border-[#C8E6C9] text-[#2E7D32]'
+                : 'bg-[#FFF0EE] border-[#FFCCD2] text-[#C93B3E]'
+            }`}
+          >
+            <span className="text-sm">{isCloudConnected ? '🟢' : '🔴'}</span>
+            <span>
+              상단 구름 아이콘:{' '}
+              <strong>{isCloudConnected ? '연두빛 (실시간 연동 활성)' : '빨간빛 (미연동/로컬 보관)'}</strong>
+            </span>
+          </div>
         </div>
 
         {/* 2. 데이터 백업 및 복원 (JSON) */}
